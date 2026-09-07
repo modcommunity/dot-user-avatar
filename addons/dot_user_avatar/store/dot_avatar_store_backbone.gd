@@ -86,7 +86,7 @@ func _open() -> DotResult:
 		return DotResult.fail(
 			DotError.CODE_INVALID,
 			"The backbone avatar store needs a base URL.",
-			"e.g. https://themodcommunity.com/api/integration/v1"
+			"e.g. https://moddingcommunity.com/api/integration/v1"
 		)
 
 	if not (base_url.begins_with("https://") or base_url.begins_with("http://")):

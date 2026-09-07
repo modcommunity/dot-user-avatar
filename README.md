@@ -19,9 +19,9 @@ An avatar is a schema id, a set of part ids and a set of colours — a few dozen
 A server validates it against the schema and the player's entitlements. A client
 resolves the part ids to real assets through dot-cloud.
 
-Part of the [dot-\*](../) family. Requires [dot-core](../dot-core). Pairs with
-[dot-user](../dot-user), [dot-cloud](../dot-cloud), [dot-net](../dot-net) and
-[dot-server](../dot-server), and **imports none of them**.
+Part of the [dot-\*](https://github.com/modcommunity) family. Requires [dot-core](https://github.com/modcommunity/dot-core). Pairs with
+[dot-user](https://github.com/modcommunity/dot-user), [dot-cloud](https://github.com/modcommunity/dot-cloud), [dot-net](https://github.com/modcommunity/dot-net) and
+[dot-server](https://github.com/modcommunity/dot-server), and **imports none of them**.
 
 ## Install
 
@@ -84,7 +84,7 @@ on every server they join.
 
 ```gdscript
 manager.config.backend = "backbone"
-manager.config.backbone_url = "https://themodcommunity.com/api/integration/v1"
+manager.config.backbone_url = "https://moddingcommunity.com/api/integration/v1"
 manager.config.backbone_token = OS.get_environment("AVATAR_TOKEN")
 manager.config.read_only = true    # most servers should read and never publish
 ```
@@ -92,7 +92,7 @@ manager.config.read_only = true    # most servers should read and never publish
 The protocol is three addresses — `GET`/`PUT`/`DELETE /user/{key}/avatar` — plus
 a public `GET /api/avatar/v1/schema`. It is open, specified, and TMC runs one
 instance of it rather than being it: **the full spec is published at
-[`docs/api/avatar-protocol.md`](https://themodcommunity.com/docs/api/avatar-protocol.md)**
+[`docs/api/avatar-protocol.md`](https://moddingcommunity.com/docs/api/avatar-protocol.md)**
 and anyone can implement their own.
 
 Two properties that are the point of the design and are easy to undo:
