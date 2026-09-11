@@ -14,7 +14,7 @@ I intend on reviewing code, testing, and editing documentation regularly. If you
 ## Avatars as Data
 Player avatars as data, so a dedicated server can check one without ever loading a mesh.
 
-An avatar is a schema id, a set of part ids and a set of colours — a few dozen bytes. A server validates it against the schema and the player's entitlements. A client resolves the part ids to real assets through dot-cloud.
+An avatar is a schema id, a set of part ids and a set of colours, which is a few dozen bytes. A server validates it against the schema and the player's entitlements. A client resolves the part ids to real assets through dot-cloud.
 
 Part of the [dot-\*](https://github.com/modcommunity) family. Requires [dot-core](https://github.com/modcommunity/dot-core). Pairs with [dot-user](https://github.com/modcommunity/dot-user), [dot-cloud](https://github.com/modcommunity/dot-cloud), [dot-net](https://github.com/modcommunity/dot-net) and [dot-server](https://github.com/modcommunity/dot-server), and **imports none of them**.
 
@@ -40,7 +40,7 @@ if not published.ok:
 
 ## The idea
 
-The server has to decide whether an avatar is legal — every part exists, the player owns it, every value is in range — on every join, for thirty players. If that needed the assets, a server would have to ship every cosmetic anyone owns.
+The server has to decide whether an avatar is legal, meaning every part exists, the player owns it and every value is in range, on every join, for thirty players. If that needed the assets, a server would have to ship every cosmetic anyone owns.
 
 So the avatar names its parts rather than embedding them:
 
@@ -77,7 +77,7 @@ manager.config.backbone_token = OS.get_environment("AVATAR_TOKEN")
 manager.config.read_only = true    # most servers should read and never publish
 ```
 
-The protocol is three addresses — `GET`/`PUT`/`DELETE /user/{key}/avatar` — plus a public `GET /api/avatar/v1/schema`. It is open, specified, and TMC runs one instance of it rather than being it: **the full spec is published at [`docs/api/avatar-protocol.md`](https://moddingcommunity.com/docs/api/avatar-protocol.md)** and anyone can implement their own.
+The protocol is three addresses, `GET`/`PUT`/`DELETE /user/{key}/avatar`, plus a public `GET /api/avatar/v1/schema`. It is open, specified, and TMC runs one instance of it rather than being it: **the full spec is published at [`docs/api/avatar-protocol.md`](https://moddingcommunity.com/docs/api/avatar-protocol.md)** and anyone can implement their own.
 
 Two properties that are the point of the design and are easy to undo:
 
@@ -88,11 +88,11 @@ Two properties that are the point of the design and are easy to undo:
 
 **A player whose cosmetics have not downloaded must still be visible.** An invisible player is a competitive advantage. Parts declare a `fallback_id`, the catalogue walks the chain (bounded, so a circular fallback cannot hang the renderer), and the plan reports what was substituted or missing so the game can show a placeholder rather than nothing.
 
-**A schema change must not make every saved avatar unloadable.** Retiring a part, adding a required slot or revoking an entitlement all invalidate existing documents. `conform()` repairs instead of refusing — dropping what no longer exists, filling required slots from their defaults — and reports what changed so the player can be told rather than silently redressed.
+**A schema change must not make every saved avatar unloadable.** Retiring a part, adding a required slot or revoking an entitlement all invalidate existing documents. `conform()` repairs instead of refusing, dropping what no longer exists and filling required slots from their defaults, and reports what changed so the player can be told rather than silently redressed.
 
 ## Wearing what you own
 
-`DotAvatarEntitlements` holds a set of part ids and nothing else. Where they came from — a purchase, a season pass, a site group — is the game's business.
+`DotAvatarEntitlements` holds a set of part ids and nothing else. Where they came from, whether a purchase, a season pass or a site group, is the game's business.
 
 The default is that a player owns **nothing**; a part is wearable only if it is marked free or is in the set. Defaulting the other way means a bug in whatever supplies the set silently unlocks everything, and nobody reports that as a bug.
 

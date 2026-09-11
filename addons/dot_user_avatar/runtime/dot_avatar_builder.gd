@@ -183,6 +183,48 @@ static func _tint_recursive(node: Node, channel: int, colour: Color) -> void:
 		_tint_recursive(child, channel, colour)
 
 
+## The same plan as plain dictionaries, for dot-player-char-model to build.
+##
+## [b]This is the seam between the two addons, and it is one-directional by design.[/b]
+## Working out which parts go where is this addon's job and must stay here: the whole
+## promise of dot-user-avatar is that a dedicated server can validate an avatar from ids
+## without holding any art, and a planner that lived in a rendering addon would be a
+## planner a server had to install a rendering addon to run.
+##
+## Instantiating scenes and reparenting nodes is not this addon's job, and used to be
+## anyway — [method apply] below is that work, written when there was nowhere else for
+## it. dot-player-char-model now has the general version, which a character's own
+## customisation document, a class's model and a loadout's view model all share, and
+## [code]DotPlayerModelBuilder.from_plan[/code] consumes exactly what this returns.
+##
+## Neither addon imports the other. A game with both calls:
+##
+## [codeblock]
+## var steps := DotPlayerModelBuilder.from_plan(DotAvatarBuilder.plan_dicts(plan))
+## DotPlayerModelBuilder.apply(steps, rig, placeholder)
+## [/codeblock]
+##
+## A game with only this one goes on calling [method apply], which still works and is
+## still tested.
+static func plan_dicts(steps: Array[Step]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+
+	for step in steps:
+		out.append({
+			"slot": step.slot,
+			"attach_to": String(step.attach_to),
+			"requested": step.requested,
+			"part": step.resolved.id if step.resolved != null else step.requested,
+			"scene_path": step.scene_path,
+			"colours": step.colours.duplicate(),
+			"layer": step.layer,
+			"missing": step.missing,
+			"substituted": step.substituted,
+		})
+
+	return out
+
+
 ## Summarises a plan for a loading indicator or a bug report.
 static func summarise(steps: Array[Step]) -> Dictionary:
 	var substituted := 0
