@@ -12,21 +12,15 @@ This asset, along with all the others, was built initially with **Claude Code** 
 I intend on reviewing code, testing, and editing documentation regularly. If you're interested in helping out, please let me know!
 
 ## Avatars as Data
-Player avatars as data, so a dedicated server can check one without ever loading a
-mesh.
+Player avatars as data, so a dedicated server can check one without ever loading a mesh.
 
-An avatar is a schema id, a set of part ids and a set of colours — a few dozen bytes.
-A server validates it against the schema and the player's entitlements. A client
-resolves the part ids to real assets through dot-cloud.
+An avatar is a schema id, a set of part ids and a set of colours — a few dozen bytes. A server validates it against the schema and the player's entitlements. A client resolves the part ids to real assets through dot-cloud.
 
-Part of the [dot-\*](https://github.com/modcommunity) family. Requires [dot-core](https://github.com/modcommunity/dot-core). Pairs with
-[dot-user](https://github.com/modcommunity/dot-user), [dot-cloud](https://github.com/modcommunity/dot-cloud), [dot-net](https://github.com/modcommunity/dot-net) and
-[dot-server](https://github.com/modcommunity/dot-server), and **imports none of them**.
+Part of the [dot-\*](https://github.com/modcommunity) family. Requires [dot-core](https://github.com/modcommunity/dot-core). Pairs with [dot-user](https://github.com/modcommunity/dot-user), [dot-cloud](https://github.com/modcommunity/dot-cloud), [dot-net](https://github.com/modcommunity/dot-net) and [dot-server](https://github.com/modcommunity/dot-server), and **imports none of them**.
 
 ## Install
 
-Copy `addons/dot_user_avatar/` and `addons/dot_core/` into your project and enable
-both in *Project → Project Settings → Plugins*.
+Copy `addons/dot_user_avatar/` and `addons/dot_core/` into your project and enable both in *Project → Project Settings → Plugins*.
 
 ## Use
 
@@ -46,9 +40,7 @@ if not published.ok:
 
 ## The idea
 
-The server has to decide whether an avatar is legal — every part exists, the player
-owns it, every value is in range — on every join, for thirty players. If that needed
-the assets, a server would have to ship every cosmetic anyone owns.
+The server has to decide whether an avatar is legal — every part exists, the player owns it, every value is in range — on every join, for thirty players. If that needed the assets, a server would have to ship every cosmetic anyone owns.
 
 So the avatar names its parts rather than embedding them:
 
@@ -58,9 +50,7 @@ a.set_part(&"hair", &"hair_long")
 a.set_colour(&"hair", 0, Color("6b4423"))
 ```
 
-Validation is four questions answered from ids: does the slot exist, does the part
-exist and fit that slot, is the player entitled to it, are the colours within the
-part's channel count. None of them loads anything.
+Validation is four questions answered from ids: does the slot exist, does the part exist and fit that slot, is the player entitled to it, are the colours within the part's channel count. None of them loads anything.
 
 ## What is in the box
 
@@ -78,9 +68,7 @@ part's channel count. None of them loads anything.
 
 ## Avatars that follow a player between servers
 
-Set the backend to `backbone` and documents live on a web backbone instead of on
-the server's disk, so a player who spent ten minutes in an editor is recognisable
-on every server they join.
+Set the backend to `backbone` and documents live on a web backbone instead of on the server's disk, so a player who spent ten minutes in an editor is recognisable on every server they join.
 
 ```gdscript
 manager.config.backend = "backbone"
@@ -89,47 +77,26 @@ manager.config.backbone_token = OS.get_environment("AVATAR_TOKEN")
 manager.config.read_only = true    # most servers should read and never publish
 ```
 
-The protocol is three addresses — `GET`/`PUT`/`DELETE /user/{key}/avatar` — plus
-a public `GET /api/avatar/v1/schema`. It is open, specified, and TMC runs one
-instance of it rather than being it: **the full spec is published at
-[`docs/api/avatar-protocol.md`](https://moddingcommunity.com/docs/api/avatar-protocol.md)**
-and anyone can implement their own.
+The protocol is three addresses — `GET`/`PUT`/`DELETE /user/{key}/avatar` — plus a public `GET /api/avatar/v1/schema`. It is open, specified, and TMC runs one instance of it rather than being it: **the full spec is published at [`docs/api/avatar-protocol.md`](https://moddingcommunity.com/docs/api/avatar-protocol.md)** and anyone can implement their own.
 
 Two properties that are the point of the design and are easy to undo:
 
-- **The server holds its own credential, never the player's.** A server that
-  could present a player's account token would be a server whose operator can act
-  as every one of their players on the whole site.
-- **`{key}` is a scoped derivation, not an account id.** The same player is a
-  different key on every server, so no two operators can compare logs and
-  reconstruct somebody's movements across the platform.
+- **The server holds its own credential, never the player's.** A server that could present a player's account token would be a server whose operator can act as every one of their players on the whole site.
+- **`{key}` is a scoped derivation, not an account id.** The same player is a different key on every server, so no two operators can compare logs and reconstruct somebody's movements across the platform.
 
 ## Two failure modes it is built around
 
-**A player whose cosmetics have not downloaded must still be visible.** An invisible
-player is a competitive advantage. Parts declare a `fallback_id`, the catalogue walks
-the chain (bounded, so a circular fallback cannot hang the renderer), and the plan
-reports what was substituted or missing so the game can show a placeholder rather
-than nothing.
+**A player whose cosmetics have not downloaded must still be visible.** An invisible player is a competitive advantage. Parts declare a `fallback_id`, the catalogue walks the chain (bounded, so a circular fallback cannot hang the renderer), and the plan reports what was substituted or missing so the game can show a placeholder rather than nothing.
 
-**A schema change must not make every saved avatar unloadable.** Retiring a part,
-adding a required slot or revoking an entitlement all invalidate existing documents.
-`conform()` repairs instead of refusing — dropping what no longer exists, filling
-required slots from their defaults — and reports what changed so the player can be
-told rather than silently redressed.
+**A schema change must not make every saved avatar unloadable.** Retiring a part, adding a required slot or revoking an entitlement all invalidate existing documents. `conform()` repairs instead of refusing — dropping what no longer exists, filling required slots from their defaults — and reports what changed so the player can be told rather than silently redressed.
 
 ## Wearing what you own
 
-`DotAvatarEntitlements` holds a set of part ids and nothing else. Where they came
-from — a purchase, a season pass, a site group — is the game's business.
+`DotAvatarEntitlements` holds a set of part ids and nothing else. Where they came from — a purchase, a season pass, a site group — is the game's business.
 
-The default is that a player owns **nothing**; a part is wearable only if it is marked
-free or is in the set. Defaulting the other way means a bug in whatever supplies the
-set silently unlocks everything, and nobody reports that as a bug.
+The default is that a player owns **nothing**; a part is wearable only if it is marked free or is in the set. Defaulting the other way means a bug in whatever supplies the set silently unlocks everything, and nobody reports that as a bug.
 
-`DotAvatarConfig.enforce_entitlements` turns the check off for a creator sandbox. It
-warns loudly at startup, because a server running with it off has no entitlement
-system at all.
+`DotAvatarConfig.enforce_entitlements` turns the check off for a creator sandbox. It warns loudly at startup, because a server running with it off has no entitlement system at all.
 
 ## Validating
 
