@@ -49,6 +49,7 @@ func _run() -> void:
 
 	await _test_backbone_protocol()
 	_test_catalogue()
+	await _test_catalogue_delivery()
 	_test_builder()
 	await _test_manager()
 	await _test_manager_entitlements()
@@ -1076,3 +1077,144 @@ func _test_backbone_protocol() -> void:
 	# run people stop reading the end of.
 	(store.http as Node).free()
 	(read_only.http as Node).free()
+
+
+# --- Delivered content -----------------------------------------------------
+#
+# [b]This is the section that would have caught the hole it was written for.[/b] The
+# catalogue asked dot-cloud whether a part was mounted and never once asked it to fetch
+# one, so a part naming content that nothing had already downloaded resolved to "" for
+# the life of the process and every wearer quietly fell back to a stock part. Nothing
+# errored, because falling back IS the designed behaviour for content that has not
+# arrived -- the bug was that it could never arrive.
+#
+# The old catalogue test above cannot see it: it runs with NO cloud client, which is the
+# branch that returns "" correctly and passes. That is the same shape as dot-map's hole,
+# whose only loader test also ran with no cloud client and also passed for months.
+
+
+## The duck-typed interface [DotContent] speaks, and nothing else.
+##
+## A Node, and `ensure` awaits a frame, so the test drives a real coroutine rather than
+## a function that happens to return a value -- `await` on a non-coroutine is a no-op and
+## would prove nothing about the asynchronous path.
+class StubCloud extends Node:
+	var mounted: Dictionary = {}
+	var asked: PackedStringArray = PackedStringArray()
+	var refuse: bool = false
+
+	## Where this pretends content lands. `res://examples` really exists and really
+	## contains `avatar_demo.tscn`, which stands in for a part scene: the catalogue
+	## checks the path with `ResourceLoader.exists`, so a fixture that is not there
+	## would fail for the wrong reason.
+	const PREFIX := "res://examples"
+
+	func ensure(
+		content_id: StringName,
+		_version: String = "",
+		_groups: PackedStringArray = PackedStringArray(),
+		_manifest_url: String = ""
+	) -> DotResult:
+		asked.append(String(content_id))
+		await get_tree().process_frame
+
+		if refuse:
+			return DotResult.fail(DotError.CODE_IO, "the network said no")
+
+		mounted[String(content_id)] = true
+		return DotResult.success(PREFIX)
+
+	func resolve(content_id: StringName) -> String:
+		return PREFIX if mounted.has(String(content_id)) else ""
+
+	func is_mounted(content_id: StringName, _version: String = "") -> bool:
+		return mounted.has(String(content_id))
+
+
+func _test_catalogue_delivery() -> void:
+	print("delivered content")
+
+	var cloud := StubCloud.new()
+	cloud.name = "StubCloud"
+	add_child(cloud)
+	DotRegistry.register(&"dot_cloud_client", cloud)
+
+	var catalogue := DotAvatarCatalogue.new()
+
+	# `avatar_demo` so that PREFIX + "/" + id + ".tscn" is a file that exists. The part
+	# id is doing double duty as a filename, which is exactly what the real catalogue
+	# does with `builtin_prefix`.
+	var part := DotAvatarPart.make(&"avatar_demo", &"hat")
+	part.content_id = "test_pack"
+
+	var arrived: Array[StringName] = []
+	catalogue.part_ready.connect(func(id: StringName) -> void: arrived.append(id))
+
+	_check(
+		catalogue.resolve(part) == "",
+		"content that is not mounted still resolves to nothing at first"
+	)
+	_check(
+		catalogue.is_pending(&"avatar_demo"),
+		"and is pending while it downloads"
+	)
+
+	# Two frames: one for the stub's own await, one for the resolution that follows it.
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_check(
+		cloud.asked.size() == 1 and cloud.asked[0] == "test_pack",
+		"a resolve miss ASKS for the content",
+		"asked for %s" % str(cloud.asked)
+	)
+	_check(
+		arrived.has(&"avatar_demo"),
+		"and announces the part when it lands, so a renderer can re-dress"
+	)
+	_check(
+		catalogue.resolve(part) == "res://examples/avatar_demo.tscn",
+		"which then resolves to the scene inside the mount",
+		catalogue.resolve(part)
+	)
+	_check(
+		not catalogue.is_pending(&"avatar_demo"),
+		"and is no longer pending"
+	)
+
+	# One fetch, not one per resolve. A character is dressed every time it spawns and a
+	# part that started a download per call would hammer the content origin.
+	catalogue.invalidate()
+	catalogue.resolve(part)
+	catalogue.resolve(part)
+	await get_tree().process_frame
+
+	_check(
+		cloud.asked.size() == 1,
+		"already-mounted content is not fetched again",
+		"asked %d times" % cloud.asked.size()
+	)
+
+	# A fetch that fails leaves the wearer on their fallback rather than stopping.
+	var catalogue_b := DotAvatarCatalogue.new()
+	cloud.refuse = true
+	var missing := DotAvatarPart.make(&"nowhere", &"hat")
+	missing.content_id = "absent_pack"
+
+	_check(catalogue_b.resolve(missing) == "", "a part whose content refuses resolves to nothing")
+
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_check(
+		catalogue_b.is_pending(&"nowhere"),
+		"stays pending after a failed fetch, so a retry is still possible"
+	)
+	_check(
+		catalogue_b.resolve(missing) == "",
+		"and resolving again does not crash"
+	)
+
+	DotRegistry.unregister(&"dot_cloud_client")
+	cloud.queue_free()
+

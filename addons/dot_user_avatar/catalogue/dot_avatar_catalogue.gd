@@ -14,9 +14,34 @@ extends RefCounted
 ## installed, and absent it falls back to built-in paths — which is what a game that
 ## ships its cosmetics in the build wants and what every test wants.
 
+## Emitted when content a part was waiting on has arrived and the part now resolves.
+##
+## [b]Without this, a cosmetic that downloads mid-game is never drawn.[/b] Resolving is
+## synchronous because it happens while a character is being dressed, so a miss can only
+## answer "not yet" — and something has to say when "yet" arrives. A renderer connects
+## this and re-dresses whoever is wearing the part; a loading indicator connects it to
+## take the part off its list.
+signal part_ready(part_id: StringName)
+
+## Fetch content on a resolve miss, rather than only resolving what is already mounted.
+##
+## [b]On, because off was the old behaviour and off is invisible.[/b] This catalogue
+## asked dot-cloud [i]whether[/i] a part was mounted and never asked it to fetch one, so
+## a part naming content nothing had downloaded resolved to "" forever and every wearer
+## fell back to a stock part. The fallback is working-as-designed, so nothing errored and
+## nothing warned: a developer could publish a cosmetic, wire it correctly, and watch it
+## silently never appear. dot-map had the same hole with the ends one step further apart
+## and it hid for months. Turn this off for a game that drives its own fetching and wants
+## the catalogue to do nothing behind its back.
+var auto_fetch: bool = true
+
 const CHANNEL := "avatar.catalogue"
 
 ## Registry name dot-cloud publishes itself under.
+##
+## Kept for [method describe] and for a game that reaches the client directly. The
+## fetching itself goes through [DotContent], which is the family's one caller for
+## downloadable content and is duck-typed against the same service.
 const CLOUD_SERVICE := &"dot_cloud_client"
 
 ## Where built-in parts live when a part names no content id.
@@ -40,8 +65,16 @@ var _cloud_checked: bool = false
 ## part id -> resolved path. Cleared when content is mounted or released.
 var _cache: Dictionary = {}
 
-## Parts asked for whose content has not arrived. Watched by a loading indicator.
+## Part id -> the [DotAvatarPart], for parts whose content has not arrived.
+##
+## The PART and not merely a marker, because when its content lands something has to
+## re-resolve it, and an id alone cannot be re-resolved. [method pending] returns the
+## keys, so it is unchanged by this.
 var _pending: Dictionary = {}
+
+## content id -> true while a fetch for it is in flight, so a part that is asked for
+## every frame while it downloads starts one fetch rather than one per frame.
+var _fetching: Dictionary = {}
 
 
 func _cloud_client() -> Object:
@@ -75,7 +108,7 @@ func resolve(part: DotAvatarPart) -> String:
 		_cache[part.id] = path
 		_pending.erase(part.id)
 	else:
-		_pending[part.id] = true
+		_pending[part.id] = part
 
 	return path
 
@@ -89,17 +122,20 @@ func _resolve_uncached(part: DotAvatarPart) -> String:
 		var builtin := "%s%s%s" % [builtin_prefix, part.id, builtin_suffix]
 		return builtin if ResourceLoader.exists(builtin) else ""
 
-	var cloud := _cloud_client()
+	# Already downloaded and mounted: the cheap synchronous question, which is the one
+	# worth asking while a character is being dressed.
+	var mounted := _scene_in(DotContent.resolve(StringName(part.content_id)), part)
 
-	if cloud == null:
-		# No dot-cloud installed. A part naming content is then simply unavailable,
-		# which is correct: the game did not ship it and nothing can fetch it.
-		return ""
+	if mounted != "":
+		return mounted
 
-	if cloud.has_method("resolve"):
-		var resolved: Variant = cloud.call("resolve", part.content_id)
-		var path := str(resolved) if resolved != null else ""
-		return path if path != "" and ResourceLoader.exists(path) else ""
+	# Not here yet. [b]Ask for it[/b] — this is the line that did not exist, and without
+	# it a part naming content that nobody had already mounted was unreachable for the
+	# life of the process. The fetch is deliberately not awaited: resolving happens
+	# mid-draw and must answer now, so the answer is "not yet" and [signal part_ready]
+	# is how "yet" arrives.
+	if auto_fetch:
+		_fetch(part)
 
 	return ""
 
@@ -135,6 +171,142 @@ func resolve_with_fallback(
 	return null
 
 
+## Where [param part]'s scene is inside mounted content at [param path], or "".
+##
+## [b]The mount is usually a DIRECTORY and the answer has to be a FILE.[/b] dot-cloud
+## answers with the entry path when a manifest names one and with the mount prefix when
+## it does not, so both arrive here — and a prefix is a directory, which
+## [method ResourceLoader.exists] says nothing exists at. Accepting the client's answer
+## unchanged therefore rejected every pack that did not name an entry, re-fetched it on
+## the next resolve, and did that for every draw: found by running the suite, which
+## counted two fetches for one part.
+##
+## The part's own scene under the prefix is tried first, because that is the layout
+## [member builtin_prefix] already describes for a build that ships its parts — one
+## naming rule whether a part is delivered or not.
+func _scene_in(path: String, part: DotAvatarPart) -> String:
+	if path == "" or part == null:
+		return ""
+
+	var dir := path if path.ends_with("/") else path + "/"
+	var candidate := "%s%s%s" % [dir, part.id, builtin_suffix]
+
+	if ResourceLoader.exists(candidate):
+		return candidate
+
+	# A manifest that named the entry document itself.
+	if ResourceLoader.exists(path):
+		return path
+
+	return ""
+
+
+## Download the content [param part] needs, then re-resolve everything waiting on it.
+##
+## Started from a resolve miss and never awaited by the caller — see the note there.
+## Safe to call repeatedly: [method DotContent.ensure] is idempotent, and [member
+## _fetching] keeps a part that is asked for every frame from starting a fetch per frame.
+func _fetch(part: DotAvatarPart) -> void:
+	if part == null or part.content_id == "":
+		return
+
+	var content := StringName(part.content_id)
+
+	if _fetching.has(content):
+		return
+
+	# No cloud client at all is the ordinary shape of a build that ships its cosmetics,
+	# and a part naming content there is a content mistake rather than a download. Said
+	# once at debug by [DotContent] rather than warned per part per frame.
+	if not DotContent.available():
+		return
+
+	_fetching[content] = true
+
+	var res: DotResult = await DotContent.ensure(content)
+
+	_fetching.erase(content)
+
+	if not res.ok:
+		# Warned, not failed. Every wearer is already drawing a fallback, so the game
+		# carries on looking slightly wrong rather than stopping — but a cosmetic that
+		# cannot be fetched is a thing an operator wants in the log exactly once.
+		# `res.error` is the DotError; the message and the code live on IT, not on the
+		# result. Reading `res.message` here threw, and the way that surfaced is worth
+		# keeping: the throw aborted THIS coroutine only -- it is detached, because a
+		# resolve miss starts it without awaiting -- so the suite still printed
+		# "151 passed, 0 failed" and exited 0 with a SCRIPT ERROR in its stderr. The
+		# line that failed was the one explaining why a download failed, which is the
+		# line somebody is reading precisely when everything else has already gone
+		# wrong. Read a suite's stderr even when it exits 0.
+		DotLog.warn(CHANNEL, "could not fetch avatar content", {
+			"content": String(content),
+			"code": res.error.code if res.error != null else "",
+			"message": res.error.message if res.error != null else "",
+		})
+		return
+
+	_content_arrived(content)
+
+
+## Re-resolve every pending part that was waiting on [param content], and announce the
+## ones that now resolve.
+##
+## [b]Only the misses are dropped, not the whole cache.[/b] [method invalidate] clears
+## everything and is right after a mount nobody was expecting; here the arrival is known,
+## so throwing away resolutions that are still correct would make every other character
+## in the scene re-resolve for nothing.
+func _content_arrived(content: StringName) -> void:
+	var ready: Array[StringName] = []
+
+	for id in _pending.keys():
+		var part: DotAvatarPart = _pending[id]
+
+		if part == null or StringName(part.content_id) != content:
+			continue
+
+		var path := DotContent.resolve(content)
+		var candidate := _scene_in(path, part)
+
+		if candidate == "":
+			# Mounted, and the part is not in it. A content mistake rather than a fetch
+			# failure, and worth saying so: the two look identical from the outside and
+			# only one of them is fixed by retrying.
+			DotLog.warn(CHANNEL, "content mounted but the part is not in it", {
+				"part": String(id), "content": String(content), "at": path,
+			})
+			continue
+
+		_cache[id] = candidate
+		_pending.erase(id)
+		ready.append(StringName(str(id)))
+
+	for id in ready:
+		part_ready.emit(id)
+
+
+## Fetch everything currently pending, and wait for all of it.
+##
+## The batched half of [member auto_fetch], for a caller that would rather block a
+## loading screen once than watch characters change clothes as packs land. Returns how
+## many parts became resolvable.
+func fetch_pending() -> int:
+	var before := _pending.size()
+
+	var wanted: Array[DotAvatarPart] = []
+
+	for id in _pending.keys():
+		var part: DotAvatarPart = _pending[id]
+
+		if part != null and part.content_id != "":
+			wanted.append(part)
+
+	for part in wanted:
+		await _fetch(part)
+
+	return before - _pending.size()
+
+
 ## Part ids whose content has been asked for and has not arrived.
 func pending() -> Array[StringName]:
 	var out: Array[StringName] = []
@@ -160,6 +332,10 @@ func invalidate() -> void:
 	_cache.clear()
 	_pending.clear()
 	_cloud_checked = false
+	# Not the in-flight set. A fetch that is still running will finish and call
+	# [method _content_arrived] against a _pending that has been emptied, which resolves
+	# nothing and emits nothing -- correct. Clearing it here would instead let the next
+	# resolve start a SECOND fetch for content already on its way.
 
 
 func describe() -> Dictionary:
