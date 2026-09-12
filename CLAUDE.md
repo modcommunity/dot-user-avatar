@@ -27,11 +27,11 @@ to solve later; it is the difference between a platform and a game.
 here ever needs a `load()`, `ResourceLoader.exists()` or a scene path to decide
 whether an avatar is legal, that is the thing to push back on.
 
-## The node-building half now lives in dot-player-char-model
+## The node-building half now lives in dot-player-char
 
 `DotAvatarBuilder` still plans — that has to stay here, because the whole promise of this addon is that a dedicated server validates an avatar from ids without holding any art, and a planner living in a rendering addon would be one a server had to install a rendering addon to run.
 
-What moved out is the *general* version of `apply`: clearing a mount, instantiating a part, writing per-instance tints. dot-player-char-model has it, written against a plain-dictionary plan, so a character's own customisation document, a class's model and a loadout's view model all share it instead of each getting a copy of these forty lines.
+What moved out is the *general* version of `apply`: clearing a mount, instantiating a part, writing per-instance tints. dot-player-char has it, as `DotPlayerModelBuilder`, written against a plain-dictionary plan, so a character's own customisation document, a class's model and a loadout's view model all share it instead of each getting a copy of these forty lines.
 
 `plan_dicts()` is the seam and `DotPlayerModelBuilder.from_plan` is the other side of it. **Neither addon imports the other**, and `apply` here still works and is still tested, for a game that installs only this one.
 

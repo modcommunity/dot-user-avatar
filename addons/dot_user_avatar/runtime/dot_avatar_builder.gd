@@ -183,7 +183,7 @@ static func _tint_recursive(node: Node, channel: int, colour: Color) -> void:
 		_tint_recursive(child, channel, colour)
 
 
-## The same plan as plain dictionaries, for dot-player-char-model to build.
+## The same plan as plain dictionaries, for dot-player-char to build.
 ##
 ## [b]This is the seam between the two addons, and it is one-directional by design.[/b]
 ## Working out which parts go where is this addon's job and must stay here: the whole
@@ -193,7 +193,7 @@ static func _tint_recursive(node: Node, channel: int, colour: Color) -> void:
 ##
 ## Instantiating scenes and reparenting nodes is not this addon's job, and used to be
 ## anyway — [method apply] below is that work, written when there was nowhere else for
-## it. dot-player-char-model now has the general version, which a character's own
+## it. dot-player-char now has the general version, which a character's own
 ## customisation document, a class's model and a loadout's view model all share, and
 ## [code]DotPlayerModelBuilder.from_plan[/code] consumes exactly what this returns.
 ##
