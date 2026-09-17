@@ -918,7 +918,8 @@ class FakeBackboneHttp extends DotHttp:
 		method: int,
 		path: String,
 		body: PackedByteArray = PackedByteArray(),
-		_headers: Dictionary = {}
+		_headers: Dictionary = {},
+		_decode_text: bool = true
 	) -> DotResult:
 		seen.append("%d %s" % [method, path])
 

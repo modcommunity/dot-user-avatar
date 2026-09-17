@@ -142,7 +142,10 @@ func _run() -> void:
 		# Named, not counted. A part missing from the web set is a part members
 		# cannot wear on the site while their game shows it, and "3 skipped" is
 		# not something anybody can act on.
-		push_warning(
+		# print, not push_warning: every other line this tool emits is stdout, and a
+		# warning that arrives in a different stream with a backtrace on it is the one
+		# line of the report nobody reads in order.
+		print(
 			"export: no scene for %s — these parts are absent from the manifest"
 			% ", ".join(skipped)
 		)
@@ -151,7 +154,7 @@ func _run() -> void:
 ## Exports everything that belongs to no slot as the manifest's own model.
 func _export_base() -> String:
 	if not ResourceLoader.exists(BASE_SCENE_PATH):
-		push_warning(
+		print(
 			"export: no base scene at %s; the manifest names one anyway, because "
 			% BASE_SCENE_PATH
 			+ "a manifest with no model is a manifest that renders nothing"
