@@ -107,4 +107,6 @@ godot --headless --path . res://examples/avatar_demo.tscn     # 118 checks
 
 Exits non-zero on failure.
 
-MIT licensed.
+## Licence
+
+MIT. See [LICENSE](LICENSE).
