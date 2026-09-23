@@ -152,6 +152,7 @@ func store(user_key: String, avatar: DotAvatar) -> DotResult:
 		store_count += 1
 	else:
 		failure_count += 1
+		_report_write_failure("an avatar was not saved", user_key, res)
 
 	return res
 
@@ -172,7 +173,30 @@ func remove(user_key: String) -> DotResult:
 		if not opened.ok:
 			return opened
 
-	return await _remove(user_key)
+	var res: DotResult = await _remove(user_key)
+
+	if not res.ok:
+		failure_count += 1
+		_report_write_failure("an avatar was not removed", user_key, res)
+
+	return res
+
+
+## Logged in the base because every backend's write passes through it -- the local
+## directory, the backbone, and whatever a game subclasses -- so none can forget it.
+##
+## [b]ERROR, because the avatar had already passed validation.[/b] A refusal before this
+## point is the rules working and is the caller's to report; this is a player's avatar
+## not persisting against a disk or a service, and DotAvatarManager.publish hands the
+## result back without a word. Only the WRITE paths: a failed open or fetch is logged by
+## the manager, which falls back to the default avatar with a WARN of its own.
+func _report_write_failure(what: String, user_key: String, res: DotResult) -> void:
+	DotLog.error(CHANNEL, what, {
+		"store": _store_name(),
+		"key": user_key,
+		"code": res.code(),
+		"error": res.error.message if res.error != null else "",
+	})
 
 
 func describe() -> Dictionary:

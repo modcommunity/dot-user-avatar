@@ -16,7 +16,10 @@ extends RefCounted
 ## characters saying which avatar this is — so a scoreboard of thirty players carries
 ## thirty digests and fetches only the documents it does not already hold.
 
-const CHANNEL := "avatar.sync"
+# No log channel: a static wire codec and two HTTP helpers, all returning a DotResult. A
+# codec that logged would write a line per hostile packet from a context with nothing to
+# name, and the helpers' only caller is DotAvatarStoreBackbone, whose failures the store
+# base logs with the player's key.
 
 ## Bits for the slot count in a packed document.
 const COUNT_BITS := 5

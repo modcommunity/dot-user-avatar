@@ -28,7 +28,8 @@ extends Resource
 ## match one computed on the other — and the digest is what tells a client its cached
 ## copy is stale.
 
-const CHANNEL := "avatar"
+# No log channel: a value object. validate(), from_dict() and migrate() return a
+# DotResult, and DotAvatarManager -- which knows the player -- logs what it does with one.
 
 ## Bumped when the stored shape changes. See [method migrate].
 const SCHEMA_VERSION := 1
