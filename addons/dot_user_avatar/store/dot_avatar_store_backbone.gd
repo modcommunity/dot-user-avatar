@@ -67,7 +67,10 @@ var timeout_sec: float = 8.0
 
 
 static func at(url: String, token: String) -> DotAvatarStoreBackbone:
-	var s := DotAvatarStoreBackbone.new()
+	# Not this class's own name. A script that names itself in an expression, loaded after
+	# its base, cuts Godot 4.7.2's exit teardown short and leaks every script loaded before
+	# it. See docs/gdscript-hazards.md, "A script that names itself".
+	var s := new()
 	s.base_url = url
 	s.server_token = token
 	return s
