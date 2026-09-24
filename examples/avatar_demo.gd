@@ -15,6 +15,18 @@ extends Node
 
 const AVATAR_DIR := "user://test_avatars"
 
+## Sections entered against sections that ran to their last line, and against this. A
+## runtime error inside a section aborts that function and nothing says so; a section that
+## bailed out early after a failed guard is counted as not finished on purpose.
+const SECTIONS := 14
+
+## Every check this suite runs, including the two at the end that compare the counts. The
+## section counter cannot see a section that aborted after announcing itself — its remaining
+## checks simply never run — and a total can. See docs/testing.md.
+const CHECKS := 153
+
+var _entered := 0
+var _completed := 0
 var _passed := 0
 var _failed := 0
 var _failures := PackedStringArray()
@@ -57,6 +69,15 @@ func _run() -> void:
 	DotPaths.remove_tree(AVATAR_DIR)
 
 	print("")
+	# The two guards, as the last two checks. See docs/testing.md.
+	_check(
+		_completed == _entered and _entered == SECTIONS,
+		"every section ran to its last line (%d of %d)" % [_completed, SECTIONS]
+	)
+	_check(
+		_passed + _failed + 1 == CHECKS,
+		"every check ran (%d of %d)" % [_passed + _failed + 1, CHECKS]
+	)
 	print("%d passed, %d failed" % [_passed, _failed])
 
 	for line in _failures:
@@ -66,6 +87,16 @@ func _run() -> void:
 
 
 # --- Assertions ------------------------------------------------------------
+
+func _section(title: String) -> void:
+	_entered += 1
+	print(title)
+
+
+## A section reached its last line. See [constant SECTIONS].
+func _done() -> void:
+	_completed += 1
+
 
 func _check(condition: bool, what: String, detail: String = "") -> bool:
 	if condition:
@@ -149,7 +180,7 @@ static func _key(seed_text: String) -> String:
 # --- Schema ----------------------------------------------------------------
 
 func _test_schema() -> void:
-	print("schema")
+	_section("schema")
 
 	_check(_schema.validate_schema().ok, "a well-formed schema validates")
 	_check(_schema.slot(&"hair") != null, "slots resolve by id")
@@ -211,12 +242,13 @@ func _test_schema() -> void:
 		if h.id == &"hat_retired":
 			offered_retired = true
 	_check(not offered_retired, "a retired part is not offered in the editor")
+	_done()
 
 
 # --- Document --------------------------------------------------------------
 
 func _test_document() -> void:
-	print("document")
+	_section("document")
 
 	var a := _wearable()
 
@@ -307,12 +339,13 @@ func _test_document() -> void:
 		not DotAvatar.from_dict(newer).ok,
 		"a document from a newer build is refused, not silently downgraded"
 	)
+	_done()
 
 
 # --- Validation against the schema -----------------------------------------
 
 func _test_validation() -> void:
-	print("validation")
+	_section("validation")
 
 	var owned := DotAvatarEntitlements.of([&"hat_paid"])
 	var nothing := DotAvatarEntitlements.none()
@@ -393,12 +426,13 @@ func _test_validation() -> void:
 		_schema.validate(cheating, null).ok,
 		"and passing null skips the ownership check entirely"
 	)
+	_done()
 
 
 # --- Conforming ------------------------------------------------------------
 
 func _test_conform() -> void:
-	print("conforming to a changed schema")
+	_section("conforming to a changed schema")
 
 	var nothing := DotAvatarEntitlements.none()
 
@@ -471,6 +505,7 @@ func _test_conform() -> void:
 		noop.ok and (noop.value as PackedStringArray).is_empty(),
 		"a document that already fits reports no changes"
 	)
+	_done()
 
 
 # --- Wire ------------------------------------------------------------------
@@ -497,7 +532,7 @@ class FakeWire extends RefCounted:
 
 
 func _test_wire() -> void:
-	print("wire format")
+	_section("wire format")
 
 	var original := _wearable()
 	var wire := FakeWire.new()
@@ -557,11 +592,13 @@ func _test_wire() -> void:
 		channelled.ok,
 		"a legal channel count is accepted"
 	)
+	_done()
 
 
 # --- Stores ----------------------------------------------------------------
 
 func _test_store_contract(store: DotAvatarStore, label: String) -> void:
+	_section("store contract")
 	print("store contract: %s" % label)
 
 	var key := _key("store-%s" % label)
@@ -616,12 +653,13 @@ func _test_store_contract(store: DotAvatarStore, label: String) -> void:
 	_check(gone.ok and gone.value == null, "[%s] and is then absent" % label)
 
 	store.close()
+	_done()
 
 
 # --- Catalogue -------------------------------------------------------------
 
 func _test_catalogue() -> void:
-	print("catalogue")
+	_section("catalogue")
 
 	var catalogue := DotAvatarCatalogue.new()
 
@@ -666,12 +704,13 @@ func _test_catalogue() -> void:
 		catalogue.resolve(streamed) == "res://custom/hat_streamed.tscn",
 		"a custom resolver overrides everything"
 	)
+	_done()
 
 
 # --- Builder ---------------------------------------------------------------
 
 func _test_builder() -> void:
-	print("builder")
+	_section("builder")
 
 	var catalogue := DotAvatarCatalogue.new()
 	var avatar := _wearable()
@@ -724,6 +763,7 @@ func _test_builder() -> void:
 		DotAvatarBuilder.apply(steps, null).ok == false,
 		"applying to no rig is a failure, not a crash"
 	)
+	_done()
 
 
 # --- Manager ---------------------------------------------------------------
@@ -745,7 +785,7 @@ func _make_manager(read_only: bool = false) -> DotAvatarManager:
 
 
 func _test_manager() -> void:
-	print("manager")
+	_section("manager")
 
 	var manager := _make_manager()
 	var ready: DotResult = await manager.setup()
@@ -828,10 +868,11 @@ func _test_manager() -> void:
 		)
 
 	locked.queue_free()
+	_done()
 
 
 func _test_manager_entitlements() -> void:
-	print("manager: entitlements")
+	_section("manager: entitlements")
 
 	var manager := _make_manager()
 	var ready: DotResult = await manager.setup()
@@ -887,6 +928,7 @@ func _test_manager_entitlements() -> void:
 	)
 
 	manager.queue_free()
+	_done()
 
 
 # --- Backbone --------------------------------------------------------------
@@ -996,7 +1038,7 @@ func _fake_backbone_store() -> DotAvatarStoreBackbone:
 
 ## The parts of the protocol the shared store contract cannot see.
 func _test_backbone_protocol() -> void:
-	print("backbone protocol")
+	_section("backbone protocol")
 
 	var store := _fake_backbone_store()
 	var http := store.http as FakeBackboneHttp
@@ -1078,6 +1120,7 @@ func _test_backbone_protocol() -> void:
 	# run people stop reading the end of.
 	(store.http as Node).free()
 	(read_only.http as Node).free()
+	_done()
 
 
 # --- Delivered content -----------------------------------------------------
@@ -1133,7 +1176,7 @@ class StubCloud extends Node:
 
 
 func _test_catalogue_delivery() -> void:
-	print("delivered content")
+	_section("delivered content")
 
 	var cloud := StubCloud.new()
 	cloud.name = "StubCloud"
@@ -1218,4 +1261,5 @@ func _test_catalogue_delivery() -> void:
 
 	DotRegistry.unregister(&"dot_cloud_client")
 	cloud.queue_free()
+	_done()
 
