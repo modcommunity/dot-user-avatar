@@ -48,7 +48,7 @@ a checkpoint people trusted and should not.
 
 ## A player with nothing stored is the GAME's default, when it has one
 
-`resolve` hands a player with no stored avatar `schema.default_avatar()` — one document, so everybody without an avatar is the same person. Every game in this family draws its stock characters by hashing an id, and every one rightly prefers what the platform resolved to its own fallback; so the variety lasted exactly until dot-platform admitted somebody, and then the whole server was one capsule. `DotAvatarManager.default_avatar_fn(user_key) -> DotAvatar` is the game's stock look, asked with the scoped key — so a player is the same person on every visit — and validated like anything stored; one that does not fit the schema falls back to the schema's default with a WARN, because a stock look is never a reason to leave somebody undrawn. `dot-platform`'s `DotPlatformIdentity` wires the game's `stock_avatar_fn` into it. The manager section checks all three, and the per-player one fails with the call removed.
+`resolve` hands a player with no stored avatar `schema.default_avatar()` — one document, so everybody without an avatar is the same person. Every game in this family draws its stock characters by hashing an id, and every one rightly prefers what the platform resolved to its own fallback; so the variety lasted exactly until dot-platform admitted somebody, and then the whole server was one capsule. `DotAvatarManager.default_avatar_fn(user_key) -> DotAvatar` is the game's stock look, asked with the scoped key — so a player is the same person on every visit — and validated like anything stored; one that does not fit the schema falls back to the schema's default with a WARN, because a stock look is never a reason to leave somebody undrawn. One that answers null falls back with no line at all: null is "no opinion", which is what `DotPlatformIdentity`'s wrapper says for a game that set no stock function, and a WARN per first-time player of such a game would be a warning about a configuration nobody got wrong. `dot-platform`'s `DotPlatformIdentity` wires the game's `stock_avatar_fn` into it. The manager section checks all three, and the per-player one fails with the call removed.
 
 ## Why entitlements default to nothing
 
@@ -224,7 +224,7 @@ find . -name '*.gd' -not -path './.godot/*' | while read f; do
     godot --headless --path . --check-only --script "res://${f#./}"
 done
 
-# 156 checks, all offline. Exits non-zero on any failure.
+# 157 checks, all offline. Exits non-zero on any failure.
 godot --headless --path . res://examples/avatar_demo.tscn
 ```
 

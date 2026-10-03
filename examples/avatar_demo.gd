@@ -23,7 +23,7 @@ const SECTIONS := 14
 ## Every check this suite runs, including the two at the end that compare the counts. The
 ## section counter cannot see a section that aborted after announcing itself — its remaining
 ## checks simply never run — and a total can. See docs/testing.md.
-const CHECKS := 156
+const CHECKS := 157
 
 var _entered := 0
 var _completed := 0
@@ -903,6 +903,26 @@ func _test_manager() -> void:
 		fell_back.ok
 			and (fell_back.value as DotAvatar).digest() == _schema.default_avatar().digest(),
 		"a default that does not fit the schema is the schema's own, not a refusal"
+	)
+
+	# Null is "no opinion": what dot-platform's wrapper answers for a game with no stock
+	# function. The schema's default, and no WARN — one per first-time player otherwise.
+	varied.default_avatar_fn = func(_user_key: String) -> DotAvatar:
+		return null
+	var warned := [0]
+	var count_warns := func(rec: Dictionary) -> void:
+		if int(rec.get("level", -1)) >= DotLog.Level.WARN:
+			warned[0] += 1
+	# The suite runs at ERROR, which would hide the very line this is about.
+	DotLog.set_channel_level(DotAvatarManager.CHANNEL, DotLog.Level.WARN)
+	DotLog.signals().record.connect(count_warns)
+	var no_opinion: DotResult = await varied.resolve(_key("varied-d"), nothing)
+	DotLog.signals().record.disconnect(count_warns)
+	DotLog.clear_channel_level(DotAvatarManager.CHANNEL)
+	_check(
+		no_opinion.ok and warned[0] == 0
+			and (no_opinion.value as DotAvatar).digest() == _schema.default_avatar().digest(),
+		"a default that answers null is the schema's own, and says nothing (%d warned)" % warned[0]
 	)
 
 	varied.queue_free()

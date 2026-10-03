@@ -305,7 +305,13 @@ func _default_for(user_key: String) -> DotResult:
 	if default_avatar_fn.is_valid():
 		var chosen: Variant = default_avatar_fn.call(user_key)
 
-		if chosen is DotAvatar and schema.validate(chosen).ok:
+		# Null is "no opinion", not a bad answer: a wrapper that forwards to a game's
+		# optional stock function — dot-platform's identity layer is one — returns null
+		# when the game set none, and a WARN for every first-time player of such a game
+		# would be a warning about a configuration nobody got wrong.
+		if chosen == null:
+			pass
+		elif chosen is DotAvatar and schema.validate(chosen).ok:
 			avatar = chosen
 		else:
 			DotLog.warn(CHANNEL, "the game's default avatar is not valid; using the schema's", {
