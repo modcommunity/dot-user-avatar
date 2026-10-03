@@ -23,7 +23,7 @@ const SECTIONS := 14
 ## Every check this suite runs, including the two at the end that compare the counts. The
 ## section counter cannot see a section that aborted after announcing itself — its remaining
 ## checks simply never run — and a total can. See docs/testing.md.
-const CHECKS := 153
+const CHECKS := 156
 
 var _entered := 0
 var _completed := 0
@@ -868,6 +868,44 @@ func _test_manager() -> void:
 		)
 
 	locked.queue_free()
+
+	# A game's own default, per player. The schema's is one document for everybody.
+	var varied := _make_manager()
+	var haired_key := _key("varied-b")
+	varied.default_avatar_fn = func(user_key: String) -> DotAvatar:
+		var avatar := _schema.default_avatar()
+		if user_key == haired_key:
+			avatar.set_part(&"hair", &"hair_long")
+		return avatar
+	await varied.setup()
+
+	var plain: DotResult = await varied.resolve(_key("varied-a"), nothing)
+	var haired: DotResult = await varied.resolve(_key("varied-b"), nothing)
+	_check(
+		plain.ok and haired.ok and not (plain.value as DotAvatar).has_slot(&"hair")
+			and (haired.value as DotAvatar).part_in(&"hair") == &"hair_long",
+		"a game's default is asked per player, by key, for somebody with nothing stored"
+	)
+
+	var stored_mine: DotResult = await varied.publish(_key("varied-b"), mine, nothing)
+	varied.clear_cache()
+	var kept: DotResult = await varied.resolve(_key("varied-b"), nothing)
+	_check(
+		stored_mine.ok and kept.ok and (kept.value as DotAvatar).digest() == mine.digest(),
+		"and never over what they did store"
+	)
+
+	varied.default_avatar_fn = func(_user_key: String) -> DotAvatar:
+		var broken := DotAvatar.make(&"not_this_schema")
+		return broken
+	var fell_back: DotResult = await varied.resolve(_key("varied-c"), nothing)
+	_check(
+		fell_back.ok
+			and (fell_back.value as DotAvatar).digest() == _schema.default_avatar().digest(),
+		"a default that does not fit the schema is the schema's own, not a refusal"
+	)
+
+	varied.queue_free()
 	_done()
 
 

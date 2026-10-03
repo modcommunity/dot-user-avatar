@@ -69,6 +69,20 @@ var store: DotAvatarStore = null
 ## Resolves part ids to content. Client-side only; a server never needs one.
 var catalogue: DotAvatarCatalogue = null
 
+## `func(user_key: String) -> DotAvatar`: the avatar a player with none stored wears.
+## Unset, [method DotAvatarSchema.default_avatar].
+##
+## [b]The schema's default is one document, so everybody without an avatar is the same
+## person.[/b] A game that varies its stock look per player — every one in this family
+## does, by hashing an id — lost that variety the moment the platform admitted somebody,
+## because what admission resolves for a first-time player is this default and a game
+## rightly prefers the platform's answer to its own. Hashing the scoped [param user_key]
+## keeps a player the same person on every visit to a server, which a per-session id did
+## not. What it returns is validated against the schema like anything stored; one that
+## fails falls back to the schema's default with a line, because a stock look is never a
+## reason to leave somebody undrawn.
+var default_avatar_fn: Callable = Callable()
+
 ## user_key -> {avatar, expires_at, active}
 var _cache: Dictionary = {}
 
@@ -287,6 +301,18 @@ func resolve(
 
 func _default_for(user_key: String) -> DotResult:
 	var avatar := schema.default_avatar()
+
+	if default_avatar_fn.is_valid():
+		var chosen: Variant = default_avatar_fn.call(user_key)
+
+		if chosen is DotAvatar and schema.validate(chosen).ok:
+			avatar = chosen
+		else:
+			DotLog.warn(CHANNEL, "the game's default avatar is not valid; using the schema's", {
+				"key": user_key,
+				"why": str(schema.validate(chosen).error) if chosen is DotAvatar else "not a DotAvatar",
+			})
+
 	_remember(user_key, avatar, true)
 	avatar_resolved.emit(user_key, avatar)
 	return DotResult.success(avatar)
