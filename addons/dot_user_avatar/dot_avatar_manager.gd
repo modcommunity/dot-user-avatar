@@ -83,6 +83,18 @@ var catalogue: DotAvatarCatalogue = null
 ## reason to leave somebody undrawn.
 var default_avatar_fn: Callable = Callable()
 
+## `func(avatar: DotAvatar) -> DotAvatar`: a document for ANOTHER schema, as this one.
+##
+## [b]A member has one avatar on the site, over the site's schema, and every game has
+## its own.[/b] Without this, `conform` refuses the site's document because it names a
+## different schema — correctly — and every member arrives as the stock person in every
+## game. A game that can say what the site's choices mean in its own terms ("their torso
+## skin is my body") gives its translation here; it runs before conform and validate, so
+## what it returns is held to this schema like anything stored. Null, or no function,
+## is the default avatar, with no line: a document this game cannot read is not an
+## error, it is a person this game draws as stock.
+var translate_fn: Callable = Callable()
+
 ## user_key -> {avatar, expires_at, active}
 var _cache: Dictionary = {}
 
@@ -256,6 +268,17 @@ func resolve(
 			)
 
 		return _default_for(user_key)
+
+	if avatar.schema_id != schema.id:
+		var translated: Variant = translate_fn.call(avatar) if translate_fn.is_valid() else null
+
+		if not (translated is DotAvatar):
+			DotLog.debug(CHANNEL, "an avatar for another schema; using the default", {
+				"key": user_key, "schema": String(avatar.schema_id),
+			})
+			return _default_for(user_key)
+
+		avatar = translated
 
 	if config.conform_on_load:
 		var conformed := schema.conform(

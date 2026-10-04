@@ -23,7 +23,7 @@ const SECTIONS := 14
 ## Every check this suite runs, including the two at the end that compare the counts. The
 ## section counter cannot see a section that aborted after announcing itself — its remaining
 ## checks simply never run — and a total can. See docs/testing.md.
-const CHECKS := 157
+const CHECKS := 161
 
 var _entered := 0
 var _completed := 0
@@ -925,6 +925,43 @@ func _test_manager() -> void:
 		"a default that answers null is the schema's own, and says nothing (%d warned)" % warned[0]
 	)
 
+
+	# The site's avatar is over the SITE's schema. A game that says what its choices mean
+	# in its own terms draws the member as they dressed; one that does not draws them as
+	# stock, quietly. What a translation returns is still held to this schema.
+	var site_doc := DotAvatar.make(&"builtin")
+	site_doc.set_part(&"top", &"skin-c")
+	var site_key := _key("varied-site")
+	await varied.store.store(site_key, site_doc)
+	var untranslated: DotResult = await varied.resolve(site_key, nothing)
+	_check(
+		untranslated.ok and (untranslated.value as DotAvatar).schema_id == _schema.id
+			and (untranslated.value as DotAvatar).digest() == _schema.default_avatar().digest(),
+		"a document for another schema, with no translation, is the default"
+	)
+	varied.translate_fn = func(foreign: DotAvatar) -> DotAvatar:
+		if foreign.schema_id != &"builtin":
+			return null
+		var ours := _schema.default_avatar()
+		if foreign.part_in(&"top") == &"skin-c":
+			ours.set_part(&"hair", &"hair_long")
+		return ours
+	varied.clear_cache()
+	var translated: DotResult = await varied.resolve(site_key, nothing)
+	_check(
+		translated.ok and (translated.value as DotAvatar).part_in(&"hair") == &"hair_long",
+		"a game's translation of the site's document is what the player wears"
+	)
+	varied.translate_fn = func(_foreign: DotAvatar) -> DotAvatar:
+		var rogue := _schema.default_avatar()
+		rogue.set_part(&"hair", &"hair_rare")
+		return rogue
+	varied.clear_cache()
+	var held: DotResult = await varied.resolve(site_key, nothing)
+	_check(
+		held.ok and (held.value as DotAvatar).part_in(&"hair") != &"hair_rare",
+		"and a translation is held to this schema's entitlements like anything stored"
+	)
 	varied.queue_free()
 	_done()
 
@@ -1014,6 +1051,10 @@ class FakeBackboneHttp extends DotHttp:
 	## Set to serve a 500, for the failure path.
 	var fail_next: bool = false
 
+	## Keys the site answers with its default document and `saved: false`: a member
+	## who has never opened the editor.
+	var unsaved: Array[String] = []
+
 	func request(
 		method: int,
 		path: String,
@@ -1040,6 +1081,10 @@ class FakeBackboneHttp extends DotHttp:
 
 		match method:
 			HTTPClient.METHOD_GET:
+				if unsaved.has(key):
+					return _json({"avatar": {"schema_id": "builtin", "version": 2,
+						"parts": {"top": "skin-a"}}, "saved": false})
+
 				if not avatars.has(key):
 					return DotResult.failure(DotError.from_http(404, "no avatar"))
 
@@ -1103,6 +1148,14 @@ func _test_backbone_protocol() -> void:
 	var key := _key("backbone-protocol")
 
 	var opened: DotResult = await store.open()
+
+	# The site's answer for a member who never saved one is a document, not a 404.
+	http.unsaved.append("Unsaved_member_key01")
+	var unsaved: DotResult = await store.fetch("Unsaved_member_key01")
+	_check(
+		unsaved.ok and unsaved.value == null,
+		"a member who never saved an avatar has none, not the site's default"
+	)
 	_check(opened.ok, "opens against a configured backbone")
 
 	var missing: DotResult = await store.fetch(key)

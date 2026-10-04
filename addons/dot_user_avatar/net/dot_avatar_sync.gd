@@ -216,6 +216,13 @@ static func fetch(
 
 	var data := body as Dictionary
 
+	# [b]The site answers every member, saved or not.[/b] One who never opened its
+	# editor gets the site's default document with `saved: false`; read as theirs, it
+	# made every such member the same person in every game, where the game's own stock
+	# look would have told them apart. Unsaved is no avatar, which is the game's call.
+	if data.get("saved", true) == false:
+		return DotResult.success(null)
+
 	if data.has("avatar") and data["avatar"] is Dictionary:
 		data = data["avatar"] as Dictionary
 

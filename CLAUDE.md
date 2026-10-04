@@ -50,6 +50,12 @@ a checkpoint people trusted and should not.
 
 `resolve` hands a player with no stored avatar `schema.default_avatar()` — one document, so everybody without an avatar is the same person. Every game in this family draws its stock characters by hashing an id, and every one rightly prefers what the platform resolved to its own fallback; so the variety lasted exactly until dot-platform admitted somebody, and then the whole server was one capsule. `DotAvatarManager.default_avatar_fn(user_key) -> DotAvatar` is the game's stock look, asked with the scoped key — so a player is the same person on every visit — and validated like anything stored; one that does not fit the schema falls back to the schema's default with a WARN, because a stock look is never a reason to leave somebody undrawn. One that answers null falls back with no line at all: null is "no opinion", which is what `DotPlatformIdentity`'s wrapper says for a game that set no stock function, and a WARN per first-time player of such a game would be a warning about a configuration nobody got wrong. `dot-platform`'s `DotPlatformIdentity` wires the game's `stock_avatar_fn` into it. The manager section checks all three, and the per-player one fails with the call removed.
 
+## The site's avatar is over the site's schema, and a game translates it
+
+A member has one avatar on the site, over its `builtin` schema (the Kenney kit's eighteen painted skins, chosen per face, top and legs), and every game has its own schema. `conform` rightly refuses a document for another schema, so until 2026-10-04 every member arrived as stock in every game. `DotAvatarManager.translate_fn(foreign) -> DotAvatar` is the game saying what the site's choices mean in its own terms — "their torso skin is my body" — and runs before conform and validate, so what it returns is held to this schema and its entitlements like anything stored. No function, or null, is the default with a DEBUG line: a document this game cannot read is a person it draws as stock, not an error. A game may still keep its own schema and its own per-game choices; the translation is only the default path.
+
+**Unsaved is no avatar.** The site answers every member, and one who never opened its editor gets the default document with `saved: false`. `DotAvatarSync.fetch` returns null for it, so the game's own per-player stock look applies instead of every such member translating to the same `skin-a` person. Both are checked and armed.
+
 ## Why entitlements default to nothing
 
 `DotAvatarEntitlements` owns an empty set unless told otherwise, and a part is
@@ -224,7 +230,7 @@ find . -name '*.gd' -not -path './.godot/*' | while read f; do
     godot --headless --path . --check-only --script "res://${f#./}"
 done
 
-# 157 checks, all offline. Exits non-zero on any failure.
+# 161 checks, all offline. Exits non-zero on any failure.
 godot --headless --path . res://examples/avatar_demo.tscn
 ```
 
