@@ -58,7 +58,7 @@ Alpha is dropped rather than quantised. A tint with alpha is a transparency sett
 
 `DotAvatar.digest()` is sixteen characters over the sorted slots, the part ids and the quantised colours. dot-user's `DotUserProfile.avatar_id` holds it.
 
-A scoreboard of thirty players therefore carries thirty digests, not thirty documents, and fetches only the ones it does not already hold. It depends on sorted slot order, which is why `filled_slots()` sorts: two machines that built the same avatar must compute the same digest.
+A scoreboard of thirty players therefore carries thirty digests, not thirty documents, and fetches only the ones it does not already hold. It depends on sorted slot order, which is why `filled_slots()` sorts: two machines that built the same avatar must compute the same digest, and so must the backbone, which sorts by text. **`filled_slots()` sorts by text with `sort_custom`, never `sort()`**: Godot orders StringNames by where they were interned, so `sort()` gives an order that depends on what the process interned first. The suite pins the digest to values website-city computes ("digest matches the site"), because every other digest check compares this addon with itself.
 
 ## A player who cannot be seen
 

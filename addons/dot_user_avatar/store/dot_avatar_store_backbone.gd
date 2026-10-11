@@ -65,6 +65,10 @@ var read_only: bool = false
 ## not answering should be admitted with a default avatar rather than held.
 var timeout_sec: float = 8.0
 
+## Whether [member http] was built (and parented to the root) by this store, so
+## [method _close] frees it.
+var _owns_http: bool = false
+
 
 static func at(url: String, token: String) -> DotAvatarStoreBackbone:
 	# Not this class's own name. A script that names itself in an expression, loaded after
@@ -115,9 +119,33 @@ func _open() -> DotResult:
 
 	if http == null:
 		http = DotHttp.new()
+		http.name = "DotAvatarStoreBackboneHttp"
+		_owns_http = true
 
 	http.base_url = base_url
 	http.timeout_sec = timeout_sec
+
+	# [b]DotHttp is a Node and sends through HTTPRequest children, which only work
+	# inside the tree.[/b] This store is a RefCounted with no tree of its own, and an
+	# orphan client fails every request with engine error 3 (Unconfigured) before
+	# touching the network -- so this store did, on every read, and the manager gave
+	# every member the game's default look with nothing but a WARN to say why. Parented
+	# to the root, deferred because open() may run inside somebody's _ready while the
+	# root is busy adding children, then awaited a frame so the first request already
+	# finds it in the tree. The same fix as dot-user's DotUserStoreBackbone.
+	if not http.is_inside_tree():
+		var tree := Engine.get_main_loop() as SceneTree
+
+		if tree == null:
+			return DotResult.fail(
+				DotError.CODE_STATE,
+				"The backbone avatar store needs a running scene tree for its HTTP client."
+			)
+
+		if http.get_parent() == null:
+			tree.root.add_child.call_deferred(http)
+
+		await tree.process_frame
 
 	DotLog.debug(
 		BACKBONE_CHANNEL,
@@ -126,6 +154,14 @@ func _open() -> DotResult:
 	)
 
 	return DotResult.success(true)
+
+
+func _close() -> void:
+	# Only a client this store built: one a caller supplied is the caller's to free.
+	if _owns_http and is_instance_valid(http):
+		http.queue_free()
+		http = null
+		_owns_http = false
 
 
 static func _is_loopback(url: String) -> bool:

@@ -146,7 +146,13 @@ func filled_slots() -> Array[StringName]:
 
 	# Sorted so two avatars with the same content serialise identically, whatever
 	# order they were built in. The digest depends on it.
-	out.sort()
+	#
+	# [b]By text, never with sort():[/b] Godot orders StringNames by where they were
+	# interned, not alphabetically, so sort() gave face/top/legs as legs, face, top in
+	# one process and something else in another, and every digest disagreed with the
+	# site's (which sorts by text) -- a client re-fetching every avatar on every join,
+	# with nothing failing. See docs/history.md.
+	out.sort_custom(func(x: StringName, y: StringName) -> bool: return String(x) < String(y))
 	return out
 
 

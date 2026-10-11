@@ -18,12 +18,12 @@ const AVATAR_DIR := "user://test_avatars"
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose.
-const SECTIONS := 14
+const SECTIONS := 16
 
 ## Every check this suite runs, including the two at the end that compare the counts. The
 ## section counter cannot see a section that aborted after announcing itself — its remaining
 ## checks simply never run — and a total can. See docs/testing.md.
-const CHECKS := 161
+const CHECKS := 172
 
 var _entered := 0
 var _completed := 0
@@ -56,7 +56,9 @@ func _run() -> void:
 	await _test_store_contract(DotAvatarStoreLocal.at(AVATAR_DIR), "local")
 	var backbone_store := _fake_backbone_store()
 	await _test_store_contract(backbone_store, "backbone")
-	# DotHttp is a Node and nothing put it in a tree, so it is ours to free.
+	# The store parented this client to the root on open, but it was supplied here, so
+	# closing leaves it alone and it is ours to free.
+	backbone_store.close()
 	(backbone_store.http as Node).free()
 
 	await _test_backbone_protocol()
@@ -65,6 +67,8 @@ func _run() -> void:
 	_test_builder()
 	await _test_manager()
 	await _test_manager_entitlements()
+	_test_digest_matches_site()
+	await _test_backbone_transport()
 
 	DotPaths.remove_tree(AVATAR_DIR)
 
@@ -1064,6 +1068,15 @@ class FakeBackboneHttp extends DotHttp:
 	) -> DotResult:
 		seen.append("%d %s" % [method, path])
 
+		# The real client's HTTPRequest refuses outside the tree, so this does too. A
+		# fake that answered from anywhere is how the store shipped an orphan client
+		# that never sent a single request.
+		if not is_inside_tree():
+			return DotResult.fail(
+				DotError.CODE_IO,
+				"starting request failed. (engine error 3 (Unconfigured))"
+			)
+
 		if fail_next:
 			fail_next = false
 			return DotResult.failure(DotError.from_http(500, "boom"))
@@ -1226,9 +1239,8 @@ func _test_backbone_protocol() -> void:
 
 	store.close()
 
-	# DotHttp is a Node and nothing here put it in a tree, so it is ours to
-	# free — an otherwise-clean run that prints "ObjectDB instances leaked" is a
-	# run people stop reading the end of.
+	# Supplied clients, so closing left them to us — and an otherwise-clean run that
+	# prints "ObjectDB instances leaked" is a run people stop reading the end of.
 	(store.http as Node).free()
 	(read_only.http as Node).free()
 	_done()
@@ -1374,3 +1386,134 @@ func _test_catalogue_delivery() -> void:
 	cloud.queue_free()
 	_done()
 
+
+# --- Agreement with the site ------------------------------------------------
+
+## The digest, pinned to values the SITE computes, not to another Godot run.
+##
+## Every other digest check here compares this addon with itself, which is how
+## [method DotAvatar.filled_slots] sorting with [code]sort()[/code] went unseen: Godot
+## orders StringNames by where they were interned, so a document with face, top and legs
+## hashed [code]legs, face, top[/code] and disagreed with website-city (which sorts by
+## text), and every client would re-fetch every avatar on every join with nothing failing.
+## The expected values are website-city's own fixtures ([code]scripts/verify-avatar-backbone.ts[/code])
+## plus the document a dev site served in the round trip that found this.
+func _test_digest_matches_site() -> void:
+	_section("digest matches the site")
+
+	var cases := [
+		[{"version": 1, "schema_id": "builtin", "parts": {}, "colours": {}}, "f4d2dc7590ed92bd"],
+		[
+			{
+				"version": 1, "schema_id": "builtin",
+				"parts": {"hair": "hair.long", "top": "top.jacket"},
+				"colours": {"hair": ["2b2118"], "top": ["2b4c7e"]},
+			},
+			"81ac5b2e0a82a697",
+		],
+		[
+			{
+				"version": 1, "schema_id": "builtin",
+				"parts": {"face": "face.skin-b", "top": "top.skin-a", "legs": "legs.skin-a"},
+				"colours": {},
+			},
+			"1b719ab816e3f768",
+		],
+	]
+
+	for case in cases:
+		var doc: DotResult = DotAvatar.from_dict(case[0])
+		var got := (doc.value as DotAvatar).digest() if doc.ok else "(unreadable)"
+		_check(got == case[1], "site digest %s" % case[1], "got %s" % got)
+
+	# Interned in reverse order on purpose, under names nothing else uses, so their
+	# interning order is the opposite of their alphabetical one whatever ran before.
+	var stamp := str(Time.get_ticks_usec())
+	var reversed := DotAvatar.make(&"order")
+	for prefix in ["c", "b", "a"]:
+		reversed.set_part(StringName("%s_slot_%s" % [prefix, stamp]), &"part")
+	var order := reversed.filled_slots().map(func(n: StringName) -> String: return String(n).left(1))
+	_check(order == ["a", "b", "c"], "slots sort by text, not by when they were interned", str(order))
+
+	_done()
+
+
+# --- Backbone store transport -----------------------------------------------
+
+## The backbone store's HTTP client has to be IN THE TREE to send anything.
+##
+## [DotHttp] is a Node whose requests are HTTPRequest children, and the store is a
+## RefCounted. It used to build an orphan client, so every read failed with engine error
+## 3 (Unconfigured) before reaching the network, and the manager gave every member the
+## game's default look. The fake client the rest of this suite uses overrides the request
+## and never noticed, so this drives the REAL [DotHttp]. Nothing here needs a backbone: a
+## closed loopback port answers "connection refused", which is a different error from
+## the one an orphan client gives.
+func _test_backbone_transport() -> void:
+	_section("backbone store transport")
+
+	var store := DotAvatarStoreBackbone.at("http://127.0.0.1:9", "tmci_test")
+	store.read_only = true
+	store.timeout_sec = 3.0
+	var opened: DotResult = await store.open()
+	_check(opened.ok, "a loopback URL with a token opens")
+	_check(
+		store.http != null and store.http.is_inside_tree(),
+		"and its HTTP client is in the tree before the first request"
+	)
+
+	var res: DotResult = await store.fetch("AbCdEfGhIjKlMnOpQrStUv")
+	var why := str(res.error) if res.error != null else ""
+	_check(not res.ok, "an unreachable backbone is a failure, never an absent avatar")
+	_check(
+		not why.contains("Unconfigured"),
+		"and the request reached the network",
+		why.substr(0, 160)
+	)
+
+	var client := store.http
+	store.close()
+	await get_tree().process_frame
+	_check(not is_instance_valid(client), "closing frees the client the store built")
+
+	# A client the host supplied (one shared across every backbone call) is the host's.
+	var shared := DotHttp.new()
+	add_child(shared)
+	var hosted := DotAvatarStoreBackbone.at("http://127.0.0.1:9", "tmci_test")
+	hosted.http = shared
+	await hosted.open()
+	hosted.close()
+	await get_tree().process_frame
+	_check(is_instance_valid(shared), "and leaves a supplied client to its owner")
+	shared.free()
+
+	# A manager's _ready and its host's setup() both open the store. Two overlapping
+	# opens each queued the same client onto the root, and the second add_child was an
+	# engine error on every boot of a server using dot-platform.
+	var slow := SlowOpenStore.new()
+	var results: Array = []
+	var opener := func() -> void: results.append(await slow.open())
+	opener.call()
+	opener.call()
+	for _i in 30:
+		if results.size() == 2:
+			break
+		await get_tree().process_frame
+	_check(
+		results.size() == 2 and slow.attempts == 1 and (results[0] as DotResult).ok
+			and (results[1] as DotResult).ok,
+		"two overlapping opens share one attempt",
+		"%d results, %d attempts" % [results.size(), slow.attempts]
+	)
+
+	_done()
+
+
+## A store whose open suspends for a frame, as the backbone store's does.
+class SlowOpenStore extends DotAvatarStoreMemory:
+	var attempts := 0
+
+	func _open() -> DotResult:
+		attempts += 1
+		await (Engine.get_main_loop() as SceneTree).process_frame
+		return DotResult.success(true)
