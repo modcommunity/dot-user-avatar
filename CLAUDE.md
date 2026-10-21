@@ -29,7 +29,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 
 ## Running and testing
 
-- The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/avatar_demo.tscn`.
+- The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/avatar_demo.tscn`.
 - `_test_store_contract` runs one sequence against every store and requires the same answers. **Add any new store to it.**
 - **Add a case for any change to `DotAvatarSchema.validate`, `DotAvatarSync.read` or the entitlement path**: there a bug is a vulnerability rather than a crash.
 
