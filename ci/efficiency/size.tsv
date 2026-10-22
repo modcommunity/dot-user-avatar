@@ -1,0 +1,12 @@
+# size
+# Baselines only shrink: scripts/<gate> --update lowers or drops entries and refuses to add.
+addons/dot_user_avatar/core/dot_avatar.gd::validate	86
+addons/dot_user_avatar/core/dot_avatar_schema.gd::validate_schema	83
+examples/avatar_demo.gd	1519
+examples/avatar_demo.gd::_test_backbone_protocol	112
+examples/avatar_demo.gd::_test_catalogue_delivery	100
+examples/avatar_demo.gd::_test_conform	84
+examples/avatar_demo.gd::_test_document	96
+examples/avatar_demo.gd::_test_manager	180
+examples/avatar_demo.gd::_test_validation	86
+tools/export_avatar_manifest.gd::_run	90
