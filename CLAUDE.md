@@ -24,13 +24,13 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `addons/dot_user_avatar/runtime/` | `DotAvatarBuilder`: `plan()` (pure), `plan_dicts()`, `apply()` |
 | `addons/dot_user_avatar/net/` | `DotAvatarSync`: the packed wire form and the backbone fetch |
 | `addons/dot_user_avatar/store/` | `DotAvatarStore` and its memory, local and backbone stores |
-| `addons/dot_user_avatar/actions/` | `DotAvatarActions` (equipped emotes, poses, gestures; the starter set's ids match the site's `BUILTIN_AVATAR_ACTIONS`), `DotAvatarActionInput` (`,` `.` `/`, rebindable, and console commands), `DotAvatarContentCache` (uploaded GLBs by content id, verified, loaded with `GLTFDocument`) |
+| `addons/dot_user_avatar/actions/` | `DotAvatarActions` (equipped emotes, poses, gestures; the starter set's ids match the site's `BUILTIN_AVATAR_ACTIONS`), `DotAvatarActionInput` (`,` `.` `/`, rebindable, and console commands), `DotAvatarContentCache` (uploaded GLBs by content id, verified, loaded with `GLTFDocument`), `DotAvatarContentFetcher` (before connecting: reads the site's `/api/avatar/v1/library`, downloads the content ids a server requires into the cache, holds a `DotLoadGate` until all are verified; failure keeps the gate held and the caller must not connect) |
 | `tools/export_avatar_manifest.gd` | `EditorScript`: parts to `.glb` and the website editor's manifest |
 | `examples/avatar_demo.tscn` | the suite; all offline, non-zero on failure |
 
 ## Running and testing
 
-- The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/avatar_demo.tscn`.
+- The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/avatar_demo.tscn` and `res://examples/avatar_fetch.tscn` (the fetcher, offline).
 - `_test_store_contract` runs one sequence against every store and requires the same answers. **Add any new store to it.**
 - **Add a case for any change to `DotAvatarSchema.validate`, `DotAvatarSync.read` or the entitlement path**: there a bug is a vulnerability rather than a crash.
 
