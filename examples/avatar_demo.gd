@@ -18,12 +18,12 @@ const AVATAR_DIR := "user://test_avatars"
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose.
-const SECTIONS := 16
+const SECTIONS := 19
 
 ## Every check this suite runs, including the two at the end that compare the counts. The
 ## section counter cannot see a section that aborted after announcing itself — its remaining
 ## checks simply never run — and a total can. See docs/testing.md.
-const CHECKS := 172
+const CHECKS := 201
 
 var _entered := 0
 var _completed := 0
@@ -69,6 +69,9 @@ func _run() -> void:
 	await _test_manager_entitlements()
 	_test_digest_matches_site()
 	await _test_backbone_transport()
+	_test_actions()
+	_test_action_input()
+	_test_content_cache()
 
 	DotPaths.remove_tree(AVATAR_DIR)
 
@@ -1517,3 +1520,160 @@ class SlowOpenStore extends DotAvatarStoreMemory:
 		attempts += 1
 		await (Engine.get_main_loop() as SceneTree).process_frame
 		return DotResult.success(true)
+
+
+# --- Emotes, poses and gestures --------------------------------------------
+
+func _test_actions() -> void:
+	_section("actions: loadout")
+	var d := DotAvatarActions.defaults()
+	_check(d.equipped(&"emote").size() == 4 and d.equipped(&"pose").size() == 4 and d.equipped(&"gesture").size() == 5,
+		"the defaults are the whole starter set, by kind")
+	var none := DotAvatarActions.from_backbone(null)
+	_check(none.ok and (none.value as DotAvatarActions).equipped(&"emote").size() == 4, "no actions field reads as the defaults")
+	_check(not DotAvatarActions.from_backbone("x").ok, "a non-object is refused")
+
+	var res := DotAvatarActions.from_backbone({
+		"EMOTE": [
+			{"builtin": "dance"},
+			{"builtin": "wave"},
+			{"builtin": "not_yet_shipped"},
+			{"builtin": null, "contentId": "action/7/2", "fileUrl": "/file/abc", "clip": "Take", "name": "Moonwalk", "loop": true},
+		],
+		"POSE": [],
+		"GESTURE": [
+			{"builtin": null, "contentId": "../../etc/x", "fileUrl": "https://cdn/x", "clip": "a"},
+			{"builtin": null, "contentId": "action/8/1", "fileUrl": "//evil.example/x", "clip": "a"},
+		],
+	})
+	if not _check(res.ok, "a mixed loadout reads"):
+		return
+	var a: DotAvatarActions = res.value
+	var ids := []
+	for e: Dictionary in a.equipped(&"emote"):
+		ids.append(e["id"])
+	_check(ids == ["dance", "action/7/2"], "built-ins of another kind and unknown ids are dropped", str(ids))
+	_check(a.equipped(&"pose").size() == 4, "an empty kind falls back to its built-ins")
+	_check(a.equipped(&"gesture").size() == 5, "a traversal id and an off-origin url are refused")
+
+	var many := []
+	for i in 20:
+		many.append({"builtin": "dance"})
+	var capped := DotAvatarActions.from_backbone({"EMOTE": many})
+	_check(capped.ok and (capped.value as DotAvatarActions).equipped(&"emote").size() == DotAvatarActions.MAX_EQUIPPED,
+		"equipped actions are capped while reading")
+
+	var order := [a.next(&"emote")["id"], a.next(&"emote")["id"], a.next(&"emote")["id"]]
+	_check(order == ["dance", "action/7/2", "dance"], "pressing again cycles", str(order))
+	_check(a.find(&"emote", "wave").is_empty() and a.find(&"gesture", "wave")["builtin"] == true,
+		"find answers only within a kind")
+	var files := a.files()
+	_check(files.size() == 1 and files[0]["content_id"] == "action/7/2", "only uploaded actions need a file")
+	_check(a.describe_lines().size() == 3, "describe_lines has a line per kind")
+	_done()
+
+
+class FakeConsole extends RefCounted:
+	var commands := {}
+
+	func add_command(name: StringName, _help: String, fn: Callable) -> FakeConsole:
+		commands[String(name)] = fn
+		return self
+
+
+func _test_action_input() -> void:
+	_section("actions: keys and commands")
+	for kind: StringName in DotAvatarActionInput.BINDINGS:
+		var action: StringName = DotAvatarActionInput.BINDINGS[kind]["action"]
+		if InputMap.has_action(action):
+			InputMap.erase_action(action)
+	InputMap.add_action(DotAvatarActionInput.ACTION_POSE)
+	var p := InputEventKey.new()
+	p.physical_keycode = KEY_P
+	InputMap.action_add_event(DotAvatarActionInput.ACTION_POSE, p)
+	DotAvatarActionInput.ensure_actions()
+
+	var emote_events := InputMap.action_get_events(DotAvatarActionInput.ACTION_EMOTE)
+	_check(emote_events.size() == 1 and (emote_events[0] as InputEventKey).physical_keycode == KEY_COMMA,
+		"the emote key defaults to comma")
+	var pose_events := InputMap.action_get_events(DotAvatarActionInput.ACTION_POSE)
+	_check(pose_events.size() == 1 and (pose_events[0] as InputEventKey).physical_keycode == KEY_P,
+		"a key bound first is left alone")
+
+	var input := DotAvatarActionInput.new()
+	add_child(input)
+	var got: Array[Dictionary] = []
+	input.action_requested.connect(func(e: Dictionary) -> void: got.append(e))
+	var press := InputEventKey.new()
+	press.physical_keycode = KEY_COMMA
+	press.pressed = true
+	input._unhandled_input(press)
+	_check(got.size() == 1 and got[0]["id"] == "cheer", "comma plays the first equipped emote")
+	var echo := press.duplicate() as InputEventKey
+	echo.echo = true
+	input._unhandled_input(echo)
+	input.enabled = false
+	input._unhandled_input(press)
+	_check(got.size() == 1, "a held key and a disabled input play nothing")
+	input.enabled = true
+	_check(input.request(&"gesture", "nope").is_empty() and got.size() == 1, "an unknown id plays nothing")
+
+	var console := FakeConsole.new()
+	input.register_console(console)
+	_check(console.commands.has("emote") and console.commands.has("pose") and console.commands.has("gesture"),
+		"emote, pose and gesture commands are registered")
+	var said: Variant = (console.commands["gesture"] as Callable).call(PackedStringArray(["wave"]))
+	_check(said == "gesture wave" and got[-1]["id"] == "wave", "a command plays the action it names")
+	var bad: Variant = (console.commands["pose"] as Callable).call(PackedStringArray(["dance"]))
+	_check(bad is DotResult and not (bad as DotResult).ok, "a command naming another kind's action fails")
+
+	input.free()
+	for kind: StringName in DotAvatarActionInput.BINDINGS:
+		InputMap.erase_action(DotAvatarActionInput.BINDINGS[kind]["action"])
+	_done()
+
+
+func _test_content_cache() -> void:
+	_section("actions: content cache")
+	var cache := DotAvatarContentCache.new()
+	cache.directory = "user://test_avatar_content"
+	DotPaths.remove_tree(cache.directory)
+
+	_check(DotAvatarContentCache.is_content_id("avatar/12/3") and DotAvatarContentCache.is_content_id("action/1/1"),
+		"site content ids are accepted")
+	_check(not DotAvatarContentCache.is_content_id("avatar/1/../x") and not DotAvatarContentCache.is_content_id("avatar/0/1")
+		and not DotAvatarContentCache.is_content_id("../avatar/1/1") and cache.path_for("x/1/1") == "",
+		"anything else never becomes a path")
+
+	var root := Node3D.new()
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = BoxMesh.new()
+	root.add_child(mesh)
+	var doc := GLTFDocument.new()
+	var state := GLTFState.new()
+	doc.append_from_scene(root, state)
+	var glb := doc.generate_buffer(state)
+	root.free()
+
+	var row := {"contentId": "avatar/5/1", "size": glb.size(), "sha256": DotHash.sha256_bytes(glb)}
+	var wrong_hash := row.duplicate()
+	wrong_hash["sha256"] = DotHash.sha256_text("other")
+	_check((cache.store(wrong_hash, glb) as DotResult).error.code == DotError.CODE_INTEGRITY, "a hash mismatch is refused")
+	var wrong_size := row.duplicate()
+	wrong_size["size"] = glb.size() + 1
+	_check((cache.store(wrong_size, glb) as DotResult).error.code == DotError.CODE_INTEGRITY, "a size mismatch is refused")
+	var text := "not a model".to_utf8_buffer()
+	var not_glb := {"contentId": "avatar/6/1", "size": text.size(), "sha256": DotHash.sha256_bytes(text)}
+	_check((cache.store(not_glb, text) as DotResult).error.code == DotError.CODE_INVALID, "a file that is not a GLB is refused")
+	_check(not cache.has(row), "nothing is kept after a refusal")
+
+	_check(cache.store(row, glb).ok and cache.has(row), "a verified GLB is kept")
+	var loaded := cache.load_scene("avatar/5/1")
+	var has_mesh := loaded.ok and not (loaded.value as Node).find_children("*", "MeshInstance3D", true, false).is_empty()
+	_check(has_mesh, "a kept GLB loads into a scene with its mesh")
+	if loaded.ok:
+		(loaded.value as Node).free()
+	_check(not cache.load_scene("avatar/9/9").ok, "an id never kept fails to load")
+
+	DotPaths.remove_tree(cache.directory)
+	_done()

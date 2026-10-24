@@ -24,6 +24,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `addons/dot_user_avatar/runtime/` | `DotAvatarBuilder`: `plan()` (pure), `plan_dicts()`, `apply()` |
 | `addons/dot_user_avatar/net/` | `DotAvatarSync`: the packed wire form and the backbone fetch |
 | `addons/dot_user_avatar/store/` | `DotAvatarStore` and its memory, local and backbone stores |
+| `addons/dot_user_avatar/actions/` | `DotAvatarActions` (equipped emotes, poses, gestures; the starter set's ids match the site's `BUILTIN_AVATAR_ACTIONS`), `DotAvatarActionInput` (`,` `.` `/`, rebindable, and console commands), `DotAvatarContentCache` (uploaded GLBs by content id, verified, loaded with `GLTFDocument`) |
 | `tools/export_avatar_manifest.gd` | `EditorScript`: parts to `.glb` and the website editor's manifest |
 | `examples/avatar_demo.tscn` | the suite; all offline, non-zero on failure |
 
@@ -49,4 +50,4 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - `plan()` stays here; general node building is dot-player-char's `DotPlayerModelBuilder` via `plan_dicts()`; neither imports the other. Tint per instance, never by editing a material. [integration](docs/integration.md#building-nodes-plan-here-apply-in-dot-player-char)
 - The manifest exporter never guesses a palette or which parts are free. [integration](docs/integration.md#exporting-for-a-web-editor)
 
-Deliberately not here: the editor UI, commerce, rigging, user-made cosmetics, animation. [document](docs/document.md#deliberately-not-here)
+Deliberately not here: the editor UI, commerce, rigging, user-made cosmetics, animation playback (actions are data here; the figure in dot-player-char plays them). [document](docs/document.md#deliberately-not-here)
