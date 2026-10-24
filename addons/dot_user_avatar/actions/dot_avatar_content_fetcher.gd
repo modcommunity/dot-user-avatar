@@ -56,12 +56,12 @@ func prepare(base_url: String, server_id: int, required: Array) -> DotResult:
 	return await fetch_rows(rows_for(lib.value, ids.value))
 
 
-## The library rows (avatars, then actions) that carry a file, keyed by content id.
+## The library rows (avatars, actions, wearables) that carry a file, keyed by content id.
 static func index_library(library: Variant) -> Dictionary:
 	var out := {}
 	if not library is Dictionary:
 		return out
-	for key in ["avatars", "actions"]:
+	for key in ["avatars", "actions", "wearables"]:
 		var list: Variant = (library as Dictionary).get(key, [])
 		if not list is Array:
 			continue

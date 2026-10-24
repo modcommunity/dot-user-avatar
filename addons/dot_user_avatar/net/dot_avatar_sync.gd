@@ -246,6 +246,21 @@ static func fetch_actions(http: DotHttp, user_key: String, headers: Dictionary =
 	return DotResult.success(actions if actions is Dictionary else null)
 
 
+## The read's equipped wearables (wire rows for [DotAvatarWearables]), [] when none, null for no player.
+static func fetch_wearables(http: DotHttp, user_key: String, headers: Dictionary = {}) -> DotResult:
+	if http == null:
+		return DotResult.fail(DotError.CODE_STATE, "No HTTP client.")
+	if not DotAvatarKey.is_usable(user_key):
+		return DotResult.fail(DotError.CODE_INVALID, "That is not a usable player key.")
+	var res: DotResult = await http.get_json("/user/%s/avatar" % user_key.uri_encode(), headers)
+	if not res.ok:
+		if res.error != null and res.error.http_status == 404:
+			return DotResult.success(null)
+		return res.wrap("Could not read the avatar wearables.")
+	var rows: Variant = (res.value as Dictionary).get("wearables") if res.value is Dictionary else null
+	return DotResult.success(rows if rows is Array else [])
+
+
 ## Publishes a player's avatar.
 ##
 ## [b]The backbone validates too.[/b] This is a client or a server acting for a

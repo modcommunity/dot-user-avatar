@@ -1,8 +1,8 @@
 class_name DotAvatarContentCache
 extends RefCounted
 
-## Uploaded avatar and action GLBs on disk, keyed by the site's content id
-## ([code]avatar/<id>/<version>[/code] or [code]action/<id>/<version>[/code]), verified before
+## Uploaded avatar, action and wearable GLBs on disk, keyed by the site's content id
+## ([code]avatar|action|wearable/<id>/<version>[/code]), verified before
 ## they are kept and loaded at runtime with [GLTFDocument].
 ##
 ## [codeblock]
@@ -21,7 +21,7 @@ const CHANNEL := "avatar.content"
 const MAX_BYTES := 25 * 1024 * 1024
 
 ## The content id is a path segment, so nothing but this shape reaches the filesystem.
-const _CONTENT_ID := "^(avatar|action)/[1-9][0-9]{0,9}/[1-9][0-9]{0,9}$"
+const _CONTENT_ID := "^(avatar|action|wearable)/[1-9][0-9]{0,9}/[1-9][0-9]{0,9}$"
 
 var directory := "user://avatar_content"
 

@@ -25,12 +25,13 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `addons/dot_user_avatar/net/` | `DotAvatarSync`: the packed wire form and the backbone fetch |
 | `addons/dot_user_avatar/store/` | `DotAvatarStore` and its memory, local and backbone stores |
 | `addons/dot_user_avatar/actions/` | `DotAvatarActions` (equipped emotes, poses, gestures; the starter set's ids match the site's `BUILTIN_AVATAR_ACTIONS`), `DotAvatarActionInput` (`,` `.` `/`, rebindable, and console commands), `DotAvatarContentCache` (uploaded GLBs by content id, verified, loaded with `GLTFDocument`), `DotAvatarContentFetcher` (before connecting: reads the site's `/api/avatar/v1/library`, downloads the content ids a server requires into the cache, holds a `DotLoadGate` until all are verified; failure keeps the gate held and the caller must not connect) |
+| `addons/dot_user_avatar/wearables/` | `DotAvatarWearables`: the site's equipped wearables (rigid GLBs, one per slot) hung on a figure's `Skeleton3D` with a `BoneAttachment3D` each; slot, bone and offset re-checked against the site's tables (`src/types/avatar/wearables.ts`), humanoid bone names resolved through aliases (the built-in figure, rig prefixes). Rows come from `DotAvatarSync.fetch_wearables`, files from `DotAvatarContentCache` |
 | `tools/export_avatar_manifest.gd` | `EditorScript`: parts to `.glb` and the website editor's manifest |
 | `examples/avatar_demo.tscn` | the suite; all offline, non-zero on failure |
 
 ## Running and testing
 
-- The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/avatar_demo.tscn` and `res://examples/avatar_fetch.tscn` (the fetcher, offline).
+- The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/avatar_demo.tscn`, `res://examples/avatar_fetch.tscn` (the fetcher, offline) and `res://examples/avatar_wearables.tscn` (6 sections, 54 checks).
 - `_test_store_contract` runs one sequence against every store and requires the same answers. **Add any new store to it.**
 - **Add a case for any change to `DotAvatarSchema.validate`, `DotAvatarSync.read` or the entitlement path**: there a bug is a vulnerability rather than a crash.
 
@@ -50,4 +51,4 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - `plan()` stays here; general node building is dot-player-char's `DotPlayerModelBuilder` via `plan_dicts()`; neither imports the other. Tint per instance, never by editing a material. [integration](docs/integration.md#building-nodes-plan-here-apply-in-dot-player-char)
 - The manifest exporter never guesses a palette or which parts are free. [integration](docs/integration.md#exporting-for-a-web-editor)
 
-Deliberately not here: the editor UI, commerce, rigging, user-made cosmetics, animation playback (actions are data here; the figure in dot-player-char plays them). [document](docs/document.md#deliberately-not-here)
+Deliberately not here: the editor UI, commerce, rigging, skinned user-made clothing (wearables are rigid), animation playback (actions are data here; the figure in dot-player-char plays them). [document](docs/document.md#deliberately-not-here)
