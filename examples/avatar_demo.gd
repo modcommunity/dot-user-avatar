@@ -23,7 +23,7 @@ const SECTIONS := 19
 ## Every check this suite runs, including the two at the end that compare the counts. The
 ## section counter cannot see a section that aborted after announcing itself — its remaining
 ## checks simply never run — and a total can. See docs/testing.md.
-const CHECKS := 201
+const CHECKS := 213
 
 var _entered := 0
 var _completed := 0
@@ -1675,5 +1675,71 @@ func _test_content_cache() -> void:
 		(loaded.value as Node).free()
 	_check(not cache.load_scene("avatar/9/9").ok, "an id never kept fails to load")
 
+	var tampered := glb.duplicate()
+	tampered[tampered.size() - 1] ^= 0xFF
+	DotPaths.write_bytes(cache.path_for("avatar/5/1"), tampered)
+	_check(cache.has(row), "a file checked this session is trusted on size alone")
+	_check(not cache.load_scene("avatar/5/1", "0".repeat(64)).ok, "a load with a different hash re-checks and fails")
+	DotPaths.write_bytes(cache.path_for("avatar/5/1"), tampered)
+	DotAvatarContentCache._verified.clear()
+	_check(not cache.has(row) and not FileAccess.file_exists(cache.path_for("avatar/5/1")),
+		"a new session re-hashes a kept file and removes one altered on disk")
+	_test_hostile_glbs(cache, glb)
+
 	DotPaths.remove_tree(cache.directory)
 	_done()
+
+
+## Rebuilds [param glb] with its JSON chunk passed through [param edit].
+func _repack(glb: PackedByteArray, edit: Callable) -> PackedByteArray:
+	var json_len := int(glb.decode_u32(12))
+	var g: Dictionary = JSON.parse_string(glb.slice(20, 20 + json_len).get_string_from_utf8())
+	edit.call(g)
+	var js := JSON.stringify(g).to_utf8_buffer()
+	while js.size() % 4 != 0:
+		js.append(0x20)
+	var rest := glb.slice(20 + json_len)
+	var out := PackedByteArray()
+	out.resize(20)
+	out.encode_u32(0, 0x46546C67)
+	out.encode_u32(4, 2)
+	out.encode_u32(8, 20 + js.size() + rest.size())
+	out.encode_u32(12, js.size())
+	out.encode_u32(16, 0x4E4F534A)
+	return out + js + rest
+
+
+func _test_hostile_glbs(cache: DotAvatarContentCache, glb: PackedByteArray) -> void:
+	var refused := func(bytes: PackedByteArray, id: String) -> bool:
+		var r := cache.store({"contentId": id, "size": bytes.size(), "sha256": DotHash.sha256_bytes(bytes)}, bytes)
+		return not r.ok and r.error.code == DotError.CODE_INVALID and not FileAccess.file_exists(cache.path_for(id))
+	_check(DotAvatarContentCache.check_glb(_repack(glb, func(_g: Dictionary) -> void: pass)).ok, "an untouched repack passes the GLB check")
+	_check(refused.call(_repack(glb, func(g: Dictionary) -> void: g["buffers"][0]["uri"] = "http://evil.test/x.bin"), "avatar/7/1"),
+		"a buffer pointing outside the file is refused")
+	_check(refused.call(_repack(glb, func(g: Dictionary) -> void: g["images"] = [{"uri": "file:///etc/passwd"}]), "avatar/7/2"),
+		"an image pointing outside the file is refused")
+	_check(refused.call(_repack(glb, func(g: Dictionary) -> void: g["extensionsRequired"] = ["EXT_unknown"]; g["extensionsUsed"] = ["EXT_unknown"]), "avatar/7/3"),
+		"an unknown extension is refused")
+	var many := func(g: Dictionary) -> void:
+		var nodes: Array = g["nodes"]
+		for i in DotAvatarContentCache.MAX_NODES:
+			nodes.append({})
+	_check(refused.call(_repack(glb, many), "avatar/7/4"), "a node count past the cap is refused")
+	_check(refused.call(_repack(glb, func(g: Dictionary) -> void: g["accessors"][0]["count"] = 900_000_000), "avatar/7/5"),
+		"an absurd accessor count is refused")
+	_check(refused.call(glb + PackedByteArray([0, 0, 0, 0]), "avatar/7/6"),
+		"a GLB whose header length disagrees with its size is refused")
+	var camera := func(g: Dictionary) -> void:
+		g["cameras"] = [{"type": "perspective", "perspective": {"yfov": 1.0, "znear": 0.1}}]
+		(g["nodes"] as Array).append({"name": "Spy", "camera": 0})
+		(g["scenes"][0]["nodes"] as Array).append((g["nodes"] as Array).size() - 1)
+	var cam := _repack(glb, camera)
+	_check(refused.call(cam, "wearable/7/7"), "a wearable carrying a camera is refused")
+	var cam_row := {"contentId": "avatar/7/8", "size": cam.size(), "sha256": DotHash.sha256_bytes(cam)}
+	var kept := cache.store(cam_row, cam)
+	var scene := cache.load_scene("avatar/7/8") if kept.ok else kept
+	_check(scene.ok and (scene.value as Node).find_children("*", "Camera3D", true, false).is_empty()
+		and not (scene.value as Node).find_children("*", "MeshInstance3D", true, false).is_empty(),
+		"an avatar's camera is dropped and its mesh kept")
+	if scene.ok:
+		(scene.value as Node).free()

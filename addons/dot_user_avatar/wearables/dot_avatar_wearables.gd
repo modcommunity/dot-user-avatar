@@ -184,7 +184,7 @@ func _scene_for(row: Dictionary) -> DotResult:
 	if scene_fn.is_valid():
 		res = scene_fn.call(row)
 	elif cache != null and cache.has_method("load_scene"):
-		res = cache.call("load_scene", String(row.get("contentId", "")))
+		res = cache.call("load_scene", String(row.get("contentId", "")), String(row.get("sha256", "")))
 	else:
 		return DotResult.fail(DotError.CODE_STATE, "no content source")
 	if not res is DotResult:
