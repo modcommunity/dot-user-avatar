@@ -229,6 +229,23 @@ static func fetch(
 	return DotAvatar.from_dict(data)
 
 
+## The [code]actions[/code] of the same read (equipped emotes, poses, gestures by key), for
+## [code]DotAvatarActions.from_backbone[/code]. Success value is null when the member has no
+## avatar read or the backbone predates actions: the caller then plays the starter set.
+static func fetch_actions(http: DotHttp, user_key: String, headers: Dictionary = {}) -> DotResult:
+	if http == null:
+		return DotResult.fail(DotError.CODE_STATE, "No HTTP client.")
+	if not DotAvatarKey.is_usable(user_key):
+		return DotResult.fail(DotError.CODE_INVALID, "That is not a usable player key.")
+	var res: DotResult = await http.get_json("/user/%s/avatar" % user_key.uri_encode(), headers)
+	if not res.ok:
+		if res.error != null and res.error.http_status == 404:
+			return DotResult.success(null)
+		return res.wrap("Could not read the avatar actions.")
+	var actions: Variant = (res.value as Dictionary).get("actions") if res.value is Dictionary else null
+	return DotResult.success(actions if actions is Dictionary else null)
+
+
 ## Publishes a player's avatar.
 ##
 ## [b]The backbone validates too.[/b] This is a client or a server acting for a

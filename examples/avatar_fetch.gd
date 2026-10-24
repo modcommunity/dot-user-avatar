@@ -3,8 +3,8 @@ extends Node
 ## Fetch-before-connect for avatar and action files, offline: a fake HTTP client serves the
 ## library and the files. godot --headless --path . res://examples/avatar_fetch.tscn
 
-const SECTIONS := 4
-const CHECKS := 29
+const SECTIONS := 5
+const CHECKS := 32
 
 var _entered := 0
 var _completed := 0
@@ -43,6 +43,7 @@ func _run() -> void:
 	await _test_failures()
 	await _test_gate()
 	await _test_ids()
+	await _test_actions_read()
 	_check(_completed == _entered and _entered == SECTIONS, "every section ran (%d of %d)" % [_completed, SECTIONS])
 	_check(_passed + _failed + 1 == CHECKS, "every check ran (%d of %d)" % [_passed + _failed + 1, CHECKS])
 	print("%d passed, %d failed" % [_passed, _failed])
@@ -202,4 +203,20 @@ func _test_ids() -> void:
 	_check(DotAvatarContentFetcher.rows_for({}, ["avatar/1/1"])[0] == {"contentId": "avatar/1/1"}, "an unlisted id becomes a url-less row")
 	_check(cache.path_for("avatar/1/2") != cache.path_for("avatar/1/3"), "versions are different paths, never replaced in place")
 	_check(DotAvatarContentFetcher.MAX_REQUIRED == 64, "the cap is 64")
+	_completed += 1
+
+
+func _test_actions_read() -> void:
+	_section("the member's equipped actions")
+	var http := FakeHttp.new()
+	add_child(http)
+	http.library = {"avatar": {}, "actions": {"EMOTE": [{"kind": "EMOTE", "name": "Wave", "builtin": "wave"}]}}
+	var res: DotResult = await DotAvatarSync.fetch_actions(http, "player_key_01")
+	_check(res.ok and res.value is Dictionary and (res.value as Dictionary).has("EMOTE"), "the read's actions come back as given")
+	http.library = {"avatar": {}}
+	res = await DotAvatarSync.fetch_actions(http, "player_key_01")
+	_check(res.ok and res.value == null, "a backbone without actions gives null (the starter set)")
+	res = await DotAvatarSync.fetch_actions(http, "x")
+	_check(not res.ok and res.error.code == DotError.CODE_INVALID, "an unusable key is refused")
+	http.free()
 	_completed += 1
