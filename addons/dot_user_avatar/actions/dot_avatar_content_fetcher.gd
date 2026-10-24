@@ -32,9 +32,21 @@ const REASON := &"avatar_content"
 ## Most ids one server may require; a hostile advertisement cannot queue thousands.
 const MAX_REQUIRED := 64
 
+## Mirror copies tried before the origin, at most this many per file.
+const MAX_MIRRORS_PER_FILE := 4
+
 var http: DotHttp = null
 var cache := DotAvatarContentCache.new()
 var gate: DotLoadGate = null
+
+## Optional [code]func(url: String) -> PackedStringArray[/code] of mirror copies to try first,
+## usually dot-cloud's [code]DotCloudClient.mirror_alternatives[/code]. Every copy is hash-checked
+## by the cache, so a mirror can only fail a download; the origin url is always tried last.
+var mirror_alternatives_fn: Callable = Callable()
+
+## Download to a [code].part[/code] file keyed by sha256 and continue it with a Range request
+## after an interruption; off reads each file into memory in one request.
+var resume := true
 
 
 ## Fetches the library, then every missing file in [param required]. Success value is the
@@ -102,12 +114,9 @@ func fetch_rows(rows: Array) -> DotResult:
 	var done := 0
 	for row in todo:
 		_progress(done, todo.size(), String(row["contentId"]))
-		var got := await http.get_bytes(String(row["url"]))
-		if not got.ok:
-			return _fail(got.error, "downloading %s" % row["contentId"])
-		var kept := cache.store(row, got.value)
+		var kept := await _download(row)
 		if not kept.ok:
-			return _fail(kept.error, "verifying %s" % row["contentId"])
+			return _fail(kept.error, "downloading %s" % row["contentId"])
 		done += 1
 	# The cache writes under user://; a browser keeps that in memory until synced.
 	if done > 0:
@@ -115,6 +124,56 @@ func fetch_rows(rows: Array) -> DotResult:
 	if gate != null and is_instance_valid(gate):
 		gate.release(REASON)
 	return DotResult.success(done)
+
+
+## The mirror copies of [param url] worth trying (https only, capped), then the origin.
+func urls_for(url: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	if mirror_alternatives_fn.is_valid():
+		var alt: Variant = mirror_alternatives_fn.call(url)
+		if alt is PackedStringArray or alt is Array:
+			for u in alt:
+				if u is String and u.begins_with("https://") and u != url and out.size() < MAX_MIRRORS_PER_FILE:
+					out.append(u)
+	out.append(url)
+	return out
+
+
+## Tries each url in turn until one delivers bytes the cache accepts.
+func _download(row: Dictionary) -> DotResult:
+	var last := DotResult.fail(DotError.CODE_STATE, "no url to download from")
+	for url in urls_for(String(row["url"])):
+		last = await _download_from(row, url)
+		if last.ok:
+			return last
+		DotLog.debug(CHANNEL, "%s from %s: %s" % [row["contentId"], url, last.error.message])
+	return last
+
+
+func _download_from(row: Dictionary, url: String) -> DotResult:
+	if not resume:
+		var got := await http.get_bytes(url)
+		return cache.store(row, got.value) if got.ok else got
+	var sha := String(row.get("sha256", "")).to_lower()
+	if sha.length() != 64 or not sha.is_valid_hex_number():
+		return DotResult.fail(DotError.CODE_INTEGRITY, "avatar content has no usable sha256", String(row["contentId"]))
+	# Keyed by hash, so a resumed transfer can only ever be continued with the same file's bytes.
+	var part := "%s/%s.part" % [cache.directory, sha]
+	var size := int(row["size"])
+	var have := DotPaths.file_size(part) if FileAccess.file_exists(part) else 0
+	if have > size:
+		DirAccess.remove_absolute(part)
+		have = 0
+	if have < size:
+		var dl := await http.download_to_file(url, part, have)
+		if not dl.ok:
+			return dl
+	var kept := cache.store(row, FileAccess.get_file_as_bytes(part))
+	DirAccess.remove_absolute(part)
+	if not kept.ok and have > 0:
+		# The kept prefix may have come from a copy that went bad; one clean try settles it.
+		return await _download_from(row, url)
+	return kept
 
 
 func _clean_ids(required: Array) -> DotResult:
