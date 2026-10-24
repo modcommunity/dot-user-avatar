@@ -151,23 +151,27 @@ func _download(row: Dictionary) -> DotResult:
 
 
 func _download_from(row: Dictionary, url: String) -> DotResult:
+	var size := int(row["size"])
 	if not resume:
-		var got := await http.get_bytes(url)
+		var got := await http.get_bytes(url, {}, size)
 		return cache.store(row, got.value) if got.ok else got
 	var sha := String(row.get("sha256", "")).to_lower()
 	if sha.length() != 64 or not sha.is_valid_hex_number():
 		return DotResult.fail(DotError.CODE_INTEGRITY, "avatar content has no usable sha256", String(row["contentId"]))
 	# Keyed by hash, so a resumed transfer can only ever be continued with the same file's bytes.
 	var part := "%s/%s.part" % [cache.directory, sha]
-	var size := int(row["size"])
 	var have := DotPaths.file_size(part) if FileAccess.file_exists(part) else 0
 	if have > size:
 		DirAccess.remove_absolute(part)
 		have = 0
 	if have < size:
-		var dl := await http.download_to_file(url, part, have)
+		# Capped at what is left of the declared size, so a hostile copy cannot stream forever.
+		var dl := await http.download_to_file(url, part, have, {}, size - have)
 		if not dl.ok:
 			return dl
+	if DotPaths.file_size(part) != size:
+		DirAccess.remove_absolute(part)
+		return DotResult.fail(DotError.CODE_INTEGRITY, "avatar content arrived at the wrong size", String(row["contentId"]))
 	var kept := cache.store(row, FileAccess.get_file_as_bytes(part))
 	DirAccess.remove_absolute(part)
 	if not kept.ok and have > 0:

@@ -3,8 +3,8 @@ extends Node
 ## Fetch-before-connect for avatar and action files, offline: a fake HTTP client serves the
 ## library and the files. godot --headless --path . res://examples/avatar_fetch.tscn
 
-const SECTIONS := 6
-const CHECKS := 41
+const SECTIONS := 7
+const CHECKS := 44
 
 var _entered := 0
 var _completed := 0
@@ -30,20 +30,32 @@ class FakeHttp extends DotHttp:
 	## The Range start of every download, in order.
 	var ranges: Array[int] = []
 
-	func get_bytes(path: String, _headers: Dictionary = {}) -> DotResult:
+	## Every max_bytes asked for, in order; urls that answer short and still report success.
+	var caps: Array[int] = []
+	var short := {}
+
+	func get_bytes(path: String, _headers: Dictionary = {}, max_bytes: int = 0) -> DotResult:
 		requests.append(path)
+		caps.append(max_bytes)
 		if not files.has(path):
 			return DotResult.fail(DotError.CODE_HTTP, "404")
+		if max_bytes > 0 and (files[path] as PackedByteArray).size() > max_bytes:
+			return DotResult.fail(DotError.CODE_INVALID, "The response was too large.")
 		return DotResult.success(files[path])
 
-	func download_to_file(path: String, dest: String, range_start: int = 0, _headers: Dictionary = {}) -> DotResult:
+	func download_to_file(path: String, dest: String, range_start: int = 0, _headers: Dictionary = {}, max_bytes: int = 0) -> DotResult:
 		requests.append(path)
 		ranges.append(range_start)
+		caps.append(max_bytes)
 		if not files.has(path):
 			return DotResult.fail(DotError.CODE_HTTP, "404")
 		var body: PackedByteArray = (files[path] as PackedByteArray).slice(range_start)
 		var stop := int(cut.get(path, -1))
 		cut.erase(path)
+		if short.has(path):
+			body = body.slice(0, body.size() / 2)
+		elif max_bytes > 0 and body.size() > max_bytes:
+			stop = max_bytes
 		if stop >= 0:
 			body = body.slice(0, stop)
 		DotPaths.ensure_parent_dir(dest)
@@ -69,6 +81,7 @@ func _run() -> void:
 	await _test_ids()
 	await _test_actions_read()
 	await _test_mirrors_resume()
+	await _test_caps()
 	_check(_completed == _entered and _entered == SECTIONS, "every section ran (%d of %d)" % [_completed, SECTIONS])
 	_check(_passed + _failed + 1 == CHECKS, "every check ran (%d of %d)" % [_passed + _failed + 1, CHECKS])
 	print("%d passed, %d failed" % [_passed, _failed])
@@ -294,5 +307,43 @@ func _test_mirrors_resume() -> void:
 	http.requests.clear()
 	res = await fetcher.fetch_rows([avatar])
 	_check(res.ok and fetcher.cache.has(avatar), "resume off still downloads in one request")
+	_cleanup(fx)
+	_completed += 1
+
+
+func _test_caps() -> void:
+	_section("downloads are capped at the declared size")
+	var fx := _fixture()
+	var fetcher: DotAvatarContentFetcher = fx[0]
+	var http: FakeHttp = fx[1]
+	var avatar: Dictionary = fx[2]
+	var size := int(avatar["size"])
+	var origin := String(avatar["url"])
+	var mirror := origin.replace("https://site.test/", "https://m.test/")
+	fetcher.mirror_alternatives_fn = func(url: String) -> PackedStringArray:
+		return PackedStringArray([url.replace("https://site.test/", "https://m.test/")])
+	var flood := PackedByteArray()
+	flood.resize(size * 3)
+	flood.fill(0xAA)
+	http.files[mirror] = flood
+	var res: DotResult = await fetcher.fetch_rows([avatar])
+	_check(res.ok and http.caps[0] == size and fetcher.cache.has(avatar),
+		"a mirror streaming past the declared size is cut off at it and the origin serves the file", str(http.caps))
+
+	DotPaths.remove_tree(fetcher.cache.directory)
+	fetcher.mirror_alternatives_fn = Callable()
+	http.short[origin] = true
+	res = await fetcher.fetch_rows([avatar])
+	var part := "%s/%s.part" % [fetcher.cache.directory, String(avatar["sha256"])]
+	_check(not res.ok and res.error.code == DotError.CODE_INTEGRITY and not FileAccess.file_exists(part),
+		"a download that ends short of the declared size is refused before it is read")
+
+	http.short.clear()
+	http.caps.clear()
+	fetcher.resume = false
+	fetcher.mirror_alternatives_fn = func(url: String) -> PackedStringArray:
+		return PackedStringArray([url.replace("https://site.test/", "https://m.test/")])
+	res = await fetcher.fetch_rows([avatar])
+	_check(res.ok and http.caps == [size, size], "an in-memory download is capped the same way", str(http.caps))
 	_cleanup(fx)
 	_completed += 1
