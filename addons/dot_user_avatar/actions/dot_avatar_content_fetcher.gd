@@ -1,26 +1,9 @@
 class_name DotAvatarContentFetcher
 extends RefCounted
 
-## Downloads the avatar and action files a server requires into a [DotAvatarContentCache],
-## before the client connects.
-##
-## [codeblock]
-## var fetcher := DotAvatarContentFetcher.new()
-## fetcher.http = http                       # a DotHttp in the tree; HTTPRequest underneath, so web works
-## fetcher.gate = client.gate                # optional: holds the cover and shows progress
-## var res := await fetcher.prepare("https://site", server_id, required_ids)
-## if not res.ok:
-##     show_error(res.error.message)         # and do not connect
-##     return
-## connect_to_server()
-## [/codeblock]
-##
-## [b]Contract.[/b] The server advertises content ids ([code]avatar/<id>/<version>[/code],
-## [code]action/<id>/<version>[/code]); the site's [code]/api/avatar/v1/library[/code] lists
-## url, size and sha256 for each. Every required id must be listed and arrive verified, or
-## [method prepare] fails and the gate stays held, so a client never joins half-loaded. A
-## version bump is a new id, so nothing is replaced in place and nothing is unmounted.
-## Files are loaded with [GLTFDocument], not mounted as packs, so there is no pack to leak.
+## Downloads the avatar and action files a server requires into a [DotAvatarContentCache] before the
+## client connects. Every required id must be listed by the site and arrive verified, or [method prepare]
+## fails and the gate stays held; files load via [GLTFDocument], so there is no pack to leak.
 
 signal failed(error: DotError)
 

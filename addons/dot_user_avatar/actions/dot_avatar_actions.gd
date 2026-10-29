@@ -1,17 +1,8 @@
 class_name DotAvatarActions
 extends RefCounted
 
-## A player's equipped emotes, poses and gestures, as the backbone's [code]actions[/code] field
-## delivers them, plus the built-in starter set every avatar can play without a download.
-##
-## [codeblock]
-## var res := DotAvatarActions.from_backbone(avatar_read["actions"])
-## var actions: DotAvatarActions = res.value if res.ok else DotAvatarActions.defaults()
-## var entry := actions.next(&"emote")   # the next equipped emote, cycling
-## [/codeblock]
-##
-## Data only: playing an entry is the figure's job (dot-player-char), reached through
-## [signal DotAvatarActionInput.action_requested].
+## A player's equipped emotes, poses and gestures as the backbone's `actions` field delivers them,
+## plus the built-in starter set. Data only: playing an entry is the figure's job (dot-player-char).
 
 const CHANNEL := "avatar.actions"
 

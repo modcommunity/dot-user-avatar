@@ -1,19 +1,9 @@
 class_name DotAvatarContentCache
 extends RefCounted
 
-## Uploaded avatar, action and wearable GLBs on disk, keyed by the site's content id
-## ([code]avatar|action|wearable/<id>/<version>[/code]), verified before
-## they are kept and loaded at runtime with [GLTFDocument].
-##
-## [codeblock]
-## var cache := DotAvatarContentCache.new()
-## if not cache.has(row):
-##     var stored := cache.store(row, downloaded_bytes)   # checks size and sha256
-## var scene := cache.load_scene(row["contentId"])        # DotResult of a Node3D
-## [/codeblock]
-##
-## A version bump is a new id, so an entry is never rewritten in place. Fetching belongs to the
-## load gate that runs before connecting; this only checks, keeps and loads.
+## Uploaded avatar, action and wearable GLBs on disk, keyed by content id (`avatar|action|wearable/<id>/<version>`),
+## verified before they are kept. A version bump is a new id, so an entry is never rewritten.
+## Fetching belongs to the load gate before connecting; this only checks, keeps and loads.
 
 const CHANNEL := "avatar.content"
 
@@ -151,9 +141,8 @@ func load_scene(content_id: String, sha256: String = "") -> DotResult:
 
 
 ## Reads a GLB's header and JSON chunk and refuses what [GLTFDocument] should never be handed:
-## a buffer or image outside the file, an extension not in [constant EXTENSIONS], counts past the
-## caps, an embedded image larger than [constant MAX_IMAGE_SIDE], and for a [param kind] of
-## `wearable` any light or camera.
+## external buffers or images, unlisted extensions, counts past the caps, oversized images, and
+## for a `wearable` any light or camera.
 static func check_glb(bytes: PackedByteArray, kind: String = "") -> DotResult:
 	if bytes.size() < 20 or bytes.slice(0, 4).get_string_from_ascii() != "glTF":
 		return _refuse("not a binary glTF")

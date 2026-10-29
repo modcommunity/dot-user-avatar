@@ -1,18 +1,8 @@
 class_name DotAvatarActionInput
 extends Node
 
-## The emote, pose and gesture keys ([code],[/code] [code].[/code] [code]/[/code] by default) and
-## the matching console commands. Each press asks for the next equipped action of that kind;
-## the game plays it on the figure from [signal action_requested].
-##
-## [codeblock]
-## DotAvatarActionInput.ensure_actions()            # fills gaps; a key table that binds first wins
-## var input := DotAvatarActionInput.new()
-## input.actions = DotAvatarActions.from_backbone(read["actions"]).value
-## input.action_requested.connect(func(e): figure.emote(StringName(e["id"])))
-## input.register_console(console_local)            # emote / pose / gesture [id]
-## add_child(input)
-## [/codeblock]
+## The emote, pose and gesture keys (`,` `.` `/` by default) and console commands. Each press asks for
+## the next equipped action of that kind; the game plays it from [signal action_requested].
 
 const CHANNEL := "avatar.actions"
 

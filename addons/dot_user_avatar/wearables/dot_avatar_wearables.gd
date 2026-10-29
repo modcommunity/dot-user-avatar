@@ -1,17 +1,8 @@
 class_name DotAvatarWearables
 extends RefCounted
 
-## Hangs a player's equipped wearables (rigid GLBs from the site) on their figure's bones, one
-## [BoneAttachment3D] per slot under the [Skeleton3D].
-##
-## [codeblock]
-## var wearables := DotAvatarWearables.new()
-## wearables.cache = content_cache            # the files the fetcher verified before connecting
-## var res := wearables.apply(skeleton, rows) # rows: the backbone read's "wearables"
-## [/codeblock]
-##
-## Rows are untrusted: slot, bone and offset are checked against the same tables the site uses
-## ([code]src/types/avatar/wearables.ts[/code]), so a hand-edited row cannot hang a 50 m hat.
+## Hangs a player's equipped wearables (rigid GLBs) on their figure's bones, one [BoneAttachment3D] per slot.
+## Rows are untrusted: slot, bone and offset are checked against the site's tables (`wearables.ts`).
 
 const CHANNEL := "avatar.wearables"
 
