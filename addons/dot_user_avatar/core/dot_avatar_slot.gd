@@ -3,10 +3,7 @@ class_name DotAvatarSlot
 extends Resource
 
 ## A position on the body that one part occupies: head, hair, torso, legs.
-##
-## Slots are the schema's structure and parts are its contents. A game defines its
-## own — a blocky sandbox and a stylised shooter want entirely different sets and
-## neither should have to fork this addon to get one.
+## Slots are the schema's structure and parts its contents; each game defines its own set.
 
 ## Stable identifier. Travels on the wire as an index into the schema's slot list.
 @export var id: StringName = &""
@@ -14,35 +11,22 @@ extends Resource
 @export var display_name: String = ""
 
 ## A player must have something in this slot.
-##
-## [b]Required slots are what stops an avatar being a way to be invisible.[/b] A
-## document with no torso is not a stylistic choice; it is a player who cannot be
-## seen. The schema fills a missing required slot with [member default_part] rather
-## than refusing, so an older document stays loadable.
+## A document with no torso is a player who cannot be seen; a missing required slot takes [member default_part] so older documents stay loadable.
 @export var required: bool = false
 
 ## Part used when the slot is empty or holds something unusable.
 @export var default_part: StringName = &""
 
 ## Slots this one hides when filled. For a helmet that replaces hair.
-##
-## Resolved at build time, not at validation time: whether a hat hides hair is a
-## rendering decision, and a server that enforced it would need to know what the
-## meshes look like.
+## Resolved at build time: hiding is a rendering decision a server cannot make without the meshes.
 @export var hides: Array[StringName] = []
 
 ## Order slots are applied in. Lower first.
-##
-## Matters when parts share a mesh or a material: skin before clothing, clothing
-## before accessories. Ordering by slot rather than by part keeps it stable when a
-## player changes what they are wearing.
+## Matters when parts share a mesh or material (skin, clothing, accessories); by slot so it stays stable as parts change.
 @export_range(0, 100, 1) var layer: int = 50
 
 ## Node name under the rig this slot attaches to. Empty means [member id].
-##
-## A [DotNodeRef] would be the family default, but a slot is not one node in one
-## scene — it is a name looked up under whatever rig the builder is given, and there
-## may be thirty rigs in a match. The lookup is the ref's job here.
+## Not a [DotNodeRef]: a slot is a name looked up under whatever rig the builder is given, and a match has many rigs.
 @export var attach_to: StringName = &""
 
 
@@ -67,10 +51,8 @@ func validate() -> DotResult:
 		return DotResult.fail(DotError.CODE_INVALID, "A slot needs an id.")
 
 	if required and default_part == &"":
-		# A required slot with no default cannot be repaired, so any document missing
-		# it has to be refused outright. That turns a schema change into every saved
-		# avatar becoming invalid, which is a bad enough outcome to forbid the
-		# configuration that causes it.
+		# A required slot with no default cannot be repaired, so any document missing it would be refused;
+		# that turns a schema change into every saved avatar becoming invalid, so forbid the configuration.
 		return DotResult.fail(
 			DotError.CODE_INVALID,
 			"A required slot needs a default part, or an avatar missing it "

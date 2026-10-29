@@ -1,26 +1,15 @@
 class_name DotAvatarEntitlements
 extends RefCounted
 
-## What one player is allowed to wear.
-##
-## [b]Deliberately a set of ids and nothing else.[/b] Where the entitlements came from
-## — a purchase, a season pass, a site group, a grant from an admin — is somebody
-## else's problem, and encoding any of it here would make this addon care about
-## commerce. A game supplies the set; this decides what it permits.
-##
-## [b]The default is that a player owns nothing.[/b] A part is wearable only if it is
-## marked free in the catalogue or is in this set. Defaulting the other way would mean
-## a bug in whatever supplies the set silently unlocks everything, and that failure is
-## invisible until somebody notices a player wearing something they did not buy.
+## What one player is allowed to wear: a set of ids and nothing else.
+## Where they came from (purchase, pass, grant) is the game's business; this addon must not care about commerce.
+## Default is that a player owns nothing, so a bug in whatever supplies the set cannot silently unlock everything.
 
 ## Part ids this player holds.
 var owned: Dictionary = {}
 
 ## Grant everything. For a creator sandbox, a screenshot build, or an editor preview.
-##
-## [b]Never set this from anything a client controls.[/b] It exists so a developer can
-## try things, and a server that honoured a client asking for it would have no
-## entitlement system at all.
+## Never set this from anything a client controls, or there is no entitlement system.
 var unrestricted: bool = false
 
 

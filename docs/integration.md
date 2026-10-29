@@ -54,3 +54,10 @@ Tinting uses `set_instance_shader_parameter`, not material swaps. Two players we
 - **dot-cloud** is found through `DotRegistry` as `dot_cloud_client` and duck-typed on `resolve(content_id)`. Absent, parts naming content are simply unavailable, which is correct: the game did not ship them and nothing can fetch them.
 - **dot-user** is found as `dot_user_manager`, and only to keep the profile's avatar digest current. Best-effort: an avatar publish must not fail because a profile write did.
 - **dot-net** is not mentioned anywhere. `DotAvatarSync.write`/`read` take a `Variant` writer and call its methods by name, the same way `DotTransportENet` reaches ENet, because a script that so much as mentions a missing `class_name` fails to parse and takes everything referencing it down too. `FakeWire` in the demo checks that contract without the dependency present.
+
+## Using the plan with dot-player-char
+
+```gdscript
+var steps := DotPlayerModelBuilder.from_plan(DotAvatarBuilder.plan_dicts(plan))
+DotPlayerModelBuilder.apply(steps, rig, placeholder)
+```

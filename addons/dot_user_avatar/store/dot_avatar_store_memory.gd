@@ -1,12 +1,8 @@
 class_name DotAvatarStoreMemory
 extends DotAvatarStore
 
-## Avatars in a dictionary, lost on exit. For tests and for a server that keeps
-## nothing.
-##
-## Also the reference the file-backed store is checked against: the self-test runs one
-## sequence through both and requires the same answers, so a bug in the file handling
-## shows up as a difference rather than as a plausible result.
+## Avatars in a dictionary, lost on exit. For tests and for a server that keeps nothing.
+## Also the reference the file-backed store is checked against: the self-test runs one sequence through both.
 
 var _avatars: Dictionary = {}
 

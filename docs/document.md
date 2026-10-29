@@ -78,3 +78,12 @@ Two paths lead there and both are closed:
 - **Rigging, skinning and morph targets.** `DotAvatarSlot` attaches a scene to a named node. Body proportions as continuous sliders would need a rig contract this addon deliberately does not impose.
 - **Moderation of user-made cosmetics.** Nothing here lets a player upload art, so there is nothing to moderate yet. When there is, the review queue belongs on the backbone and the part id becomes the thing that is approved.
 - **Animation.** An avatar says what a player looks like, not what they are doing.
+
+## Building a document
+
+```gdscript
+var avatar := DotAvatar.new()
+avatar.schema_id = &"humanoid"
+avatar.set_part(&"hair", &"hair_long")
+avatar.set_colour(&"hair", 0, Color("6b4423"))
+```

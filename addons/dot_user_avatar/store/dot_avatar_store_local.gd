@@ -2,19 +2,14 @@ class_name DotAvatarStoreLocal
 extends DotAvatarStore
 
 ## Avatars as JSON files under a directory. The default, and it works unconfigured.
-##
-## One file per player, for the reason dot-user's profile store gives: a single file
-## is rewritten in full on every change and loses everything rather than one record
-## when a write is interrupted.
+## One file per player, so an interrupted write loses one record, not all.
 
 const LOCAL_CHANNEL := "avatar.store.local"
 
 var directory: String = "user://avatars"
 
 ## Write through a temporary file and rename over the target.
-##
-## Passed to [method DotPaths.write_json], which already does the temporary file, the
-## rename and the browser's IndexedDB flush.
+## Passed to [method DotPaths.write_json], which does the temporary file, rename and browser IndexedDB flush.
 var atomic_writes: bool = true
 
 

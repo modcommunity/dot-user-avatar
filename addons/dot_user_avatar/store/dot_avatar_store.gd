@@ -2,15 +2,8 @@ class_name DotAvatarStore
 extends RefCounted
 
 ## Where avatar documents live, keyed by the player's scoped id.
-##
-## Same shape and same two rules as dot-user's profile store, because it is the same
-## problem: a per-player record a community running several servers wants to share.
-## Loads may be slow and lookups on the join path may not; a failed read keeps
-## whatever is in force rather than replacing it with a blank.
-##
-## Keyed by the [b]scoped[/b] id dot-user derives, never an account id, for the
-## same reason profiles are: a file named after an account id lets two operators
-## correlate their players by comparing directory listings.
+## Same shape and rules as dot-user's profile store: loads may be slow, join-path lookups may not, and a failed read keeps what is in force.
+## Keyed by the scoped id, never an account id, so two operators cannot correlate players by directory listing.
 
 const CHANNEL := "avatar.store"
 
@@ -26,8 +19,6 @@ var fetch_count: int = 0
 var store_count: int = 0
 var failure_count: int = 0
 
-
-# --- Subclass interface ----------------------------------------------------
 
 ## Reads one avatar. A successful null means "this player has not made one".
 func _fetch(_user_key: String) -> DotResult:
@@ -64,17 +55,12 @@ func _store_name() -> String:
 	return "DotAvatarStore"
 
 
-# --- Public API ------------------------------------------------------------
-
 func open() -> DotResult:
 	if _opened:
 		return DotResult.success(true)
 
-	# [b]One attempt at a time; a second caller waits for the first.[/b] _open can
-	# suspend (the backbone store waits a frame for its HTTP client to enter the tree),
-	# and a manager's _ready and its host's explicit setup() both open the store. Two
-	# overlapping attempts each queued the same client onto the root, and the second
-	# add_child was an engine error on every server boot.
+		# One attempt at a time; a second caller waits. _open can suspend and both a manager's _ready and
+		# setup() open the store; overlapping attempts queued the same client onto the root twice.
 	if _opening:
 		var shared: DotResult = await _open_finished
 		return shared
@@ -107,9 +93,7 @@ func is_writable() -> bool:
 
 
 ## Reads an avatar, or null when the player has not made one.
-##
-## The key is checked before any implementation sees it, so a malformed one can never
-## reach a filesystem path or a URL.
+## The key is checked before any implementation sees it, so a malformed one never reaches a path or URL.
 func fetch(user_key: String) -> DotResult:
 	if not DotAvatarKey.is_usable(user_key):
 		return DotResult.fail(
@@ -134,12 +118,7 @@ func fetch(user_key: String) -> DotResult:
 
 
 ## Writes an avatar, validating its structure first.
-##
-## [b]Structure only, deliberately.[/b] Whether the player is entitled to what they
-## are wearing is a schema-and-entitlements question, and the store does not hold
-## either. [DotAvatarManager.publish] is where both checks happen together; a store
-## that pretended to do the second would be a checkpoint people trusted and should
-## not.
+## Structure only: entitlements need the schema, which the store lacks; [DotAvatarManager.publish] checks both, and a store pretending to would be a trusted false checkpoint.
 func store(user_key: String, avatar: DotAvatar) -> DotResult:
 	if avatar == null:
 		return DotResult.fail(DotError.CODE_INVALID, "No avatar to store.")
@@ -200,14 +179,8 @@ func remove(user_key: String) -> DotResult:
 	return res
 
 
-## Logged in the base because every backend's write passes through it -- the local
-## directory, the backbone, and whatever a game subclasses -- so none can forget it.
-##
-## [b]ERROR, because the avatar had already passed validation.[/b] A refusal before this
-## point is the rules working and is the caller's to report; this is a player's avatar
-## not persisting against a disk or a service, and DotAvatarManager.publish hands the
-## result back without a word. Only the WRITE paths: a failed open or fetch is logged by
-## the manager, which falls back to the default avatar with a WARN of its own.
+## Logged in the base because every backend's write passes through it, so none can forget it.
+## ERROR because the avatar had passed validation: this is a player's avatar not persisting. Only write paths; the manager logs failed opens and fetches.
 func _report_write_failure(what: String, user_key: String, res: DotResult) -> void:
 	DotLog.error(CHANNEL, what, {
 		"store": _store_name(),

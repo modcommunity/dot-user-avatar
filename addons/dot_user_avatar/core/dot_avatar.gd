@@ -2,31 +2,9 @@
 class_name DotAvatar
 extends Resource
 
-## What a player looks like, as data. A few dozen bytes, not a scene.
-##
-## [b]The document is the whole design.[/b] A server has to decide whether an avatar
-## is legal — every part exists, the player is entitled to it, every value is in
-## range — and it has to do that on every join, for thirty players, without loading a
-## mesh. So the avatar is a schema id, a set of part ids and a set of colours, and
-## the parts are named rather than embedded.
-##
-## [codeblock]
-## var avatar := DotAvatar.new()
-## avatar.schema_id = &"humanoid"
-## avatar.set_part(&"hair", &"hair_long")
-## avatar.set_colour(&"hair", 0, Color("6b4423"))
-## [/codeblock]
-##
-## [b]It is relayed to every other player, so it is bounded.[/b] Slot count, id
-## lengths and colour count are all capped in [method validate]. An unbounded avatar
-## is an amplification vector: one player writes a large document and the server sends
-## it to everyone in the match every time somebody joins.
-##
-## [b]Colours are quantised to 8 bits per channel here, not on the wire.[/b] Doing it
-## at the wire would mean the document a client validated and the document a server
-## stored differ in their low bits, so a digest computed on one machine would not
-## match one computed on the other — and the digest is what tells a client its cached
-## copy is stale.
+## What a player looks like, as data: a schema id, part ids and colours, parts named not embedded.
+## A server validates it without loading a mesh; it is relayed to every player, so [method validate] caps it. Example: docs/document.md.
+## Colours are quantised to 8 bits here, not on the wire, so the stale-cache digest matches on every machine.
 
 # No log channel: a value object. validate(), from_dict() and migrate() return a
 # DotResult, and DotAvatarManager -- which knows the player -- logs what it does with one.
@@ -35,9 +13,7 @@ extends Resource
 const SCHEMA_VERSION := 1
 
 ## Most slots one avatar may fill.
-##
-## Bounded because the count travels on the wire and because a document with sixty
-## slots is a rig, not an avatar.
+## Bounded because the count travels on the wire; sixty slots is a rig, not an avatar.
 const MAX_SLOTS := 24
 
 ## Longest a slot or part id may be, in characters.
@@ -64,8 +40,6 @@ static func make(p_schema_id: StringName) -> DotAvatar:
 	a.schema_id = p_schema_id
 	return a
 
-
-# --- Reading and writing ---------------------------------------------------
 
 func part_in(slot: StringName) -> StringName:
 	var found: Variant = parts.get(slot, &"")
@@ -100,9 +74,7 @@ func colour_of(slot: StringName, channel: int) -> Color:
 
 
 ## Sets one colour channel, quantised to 8 bits per component.
-##
-## Quantised here rather than on the wire so a document is byte-identical wherever it
-## was built. See the class documentation.
+## Quantised here rather than on the wire so a document is byte-identical wherever it was built.
 func set_colour(slot: StringName, channel: int, colour: Color) -> DotResult:
 	if channel < 0 or channel >= MAX_CHANNELS:
 		return DotResult.fail(
@@ -123,10 +95,7 @@ func set_colour(slot: StringName, channel: int, colour: Color) -> DotResult:
 
 
 ## Rounds a colour to what the wire format carries: 8 bits per component, no alpha.
-##
-## Alpha is dropped rather than quantised. A tint with alpha is a transparency
-## setting, and a player who could make their avatar transparent would be harder to
-## see, which is the same problem as an invisible one.
+## Alpha is dropped: a transparent avatar would be harder to see, like an invisible one.
 static func quantise(colour: Color) -> Color:
 	return Color(
 		roundf(clampf(colour.r, 0.0, 1.0) * 255.0) / 255.0,
@@ -144,26 +113,15 @@ func filled_slots() -> Array[StringName]:
 		if part_in(name) != &"":
 			out.append(name)
 
-	# Sorted so two avatars with the same content serialise identically, whatever
-	# order they were built in. The digest depends on it.
-	#
-	# [b]By text, never with sort():[/b] Godot orders StringNames by where they were
-	# interned, not alphabetically, so sort() gave face/top/legs as legs, face, top in
-	# one process and something else in another, and every digest disagreed with the
-	# site's (which sorts by text) -- a client re-fetching every avatar on every join,
-	# with nothing failing. See docs/history.md.
+	# Sorted so equal content serialises identically; the digest depends on it.
+	# By text, never sort(): Godot orders StringNames by intern order, so digests disagreed with the
+	# site's (which sorts by text) and clients re-fetched every avatar. See docs/history.md.
 	out.sort_custom(func(x: StringName, y: StringName) -> bool: return String(x) < String(y))
 	return out
 
 
-# --- Validation ------------------------------------------------------------
-
 ## Structural checks that need no schema: shape, bounds, and nothing else.
-##
-## [b]Separate from [method DotAvatarSchema.validate] on purpose.[/b] This is the
-## check a server can run before it knows which schema a document claims, so a
-## malformed document is refused before anything looks a slot up. The schema check is
-## the one that decides whether the contents mean anything.
+## Separate from [method DotAvatarSchema.validate] so a server can refuse a malformed document before looking any slot up.
 func validate() -> DotResult:
 	if schema_id == &"":
 		return DotResult.fail(
@@ -247,9 +205,7 @@ func validate() -> DotResult:
 
 
 ## Ids are ASCII letters, digits, underscore, dash and dot.
-##
-## Deliberately narrow. Widening it later is easy; narrowing it after content has
-## shipped with an id that no longer passes is not.
+## Narrow on purpose: widening later is easy, narrowing after content shipped is not.
 static func _is_safe_id(id: String) -> bool:
 	if id.strip_edges() == "":
 		return false
@@ -270,17 +226,9 @@ static func _is_safe_id(id: String) -> bool:
 	return true
 
 
-# --- Identity --------------------------------------------------------------
-
-## A short, stable hash of the document's contents.
-##
-## [b]What tells a client its cached copy is stale.[/b] A profile carries this rather
-## than the avatar itself, so a scoreboard showing thirty players does not carry
-## thirty documents — it carries thirty digests and fetches only the ones it does not
-## already have.
-##
-## Depends on the sorted slot order and the quantised colours, so two machines that
-## built the same avatar compute the same digest.
+## A short, stable hash of the document's contents, what tells a client its cached copy is stale.
+## A profile carries this instead of the avatar, so a scoreboard fetches only what it lacks.
+## Depends on the sorted slot order and quantised colours so two machines agree.
 func digest() -> String:
 	var parts_out := PackedStringArray()
 
@@ -300,8 +248,6 @@ func digest() -> String:
 func equals(other: DotAvatar) -> bool:
 	return other != null and digest() == other.digest()
 
-
-# --- Serialisation ---------------------------------------------------------
 
 func to_dict() -> Dictionary:
 	var colour_out := {}
@@ -325,9 +271,7 @@ func to_dict() -> Dictionary:
 
 
 ## Rebuilds an avatar from stored or received data.
-##
-## Every field is read defensively and the result is validated, because this is where
-## a hand-edited file, an older build and a hostile client payload all arrive.
+## Every field is read defensively and the result validated: hand-edited files, older builds and hostile payloads all arrive here.
 static func from_dict(data: Dictionary) -> DotResult:
 	var a := DotAvatar.new()
 

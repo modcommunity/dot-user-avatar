@@ -3,17 +3,8 @@ class_name DotAvatarSchema
 extends Resource
 
 ## What parts exist, which slots they fit, and what a legal avatar looks like.
-##
-## [b]A resource, not a hardcoded enum.[/b] A low-poly shooter and a blocky sandbox
-## want entirely different slot sets, and neither should have to fork this addon to
-## get one. A game ships its own schema and both its client and its server load the
-## same file.
-##
-## [b]This is the file a dedicated server needs and the meshes are the file it does
-## not.[/b] Validating an avatar is: does every slot exist, does every part exist and
-## fit its slot, is the player entitled to it, are the colours in range. All four are
-## answered from ids. A server that had to load a mesh to check a hat would need every
-## cosmetic anyone owns, which is the design this exists to avoid.
+## A resource, not an enum, so each game ships its own slot set and client and server load the same file.
+## A server validates from ids alone (slot, part, entitlement, colour range) and never loads a mesh.
 
 const CHANNEL := "avatar.schema"
 
@@ -131,8 +122,6 @@ func ordered_slots() -> Array[DotAvatarSlot]:
 	return out
 
 
-# --- Schema validation -----------------------------------------------------
-
 ## Checks the schema itself. Call at startup, not per join.
 func validate_schema() -> DotResult:
 	if id == &"":
@@ -207,16 +196,8 @@ func validate_schema() -> DotResult:
 	return DotResult.success(true)
 
 
-# --- Document validation ---------------------------------------------------
-
-## Whether a document is legal under this schema and these entitlements.
-##
-## [b]This is the call a server makes on every join, and it loads nothing.[/b] It
-## answers four questions from ids alone: does the slot exist, does the part exist and
-## fit, is the player entitled to it, are the colours within the part's channel count.
-##
-## Pass [param entitlements] as null to skip the ownership check — correct for a
-## client previewing its own work, never correct on a server.
+## Whether a document is legal under this schema and these entitlements; loads nothing, so a server runs it on every join.
+## Pass [param entitlements] as null to skip the ownership check: right for a client previewing, never on a server.
 func validate(
 	avatar: DotAvatar,
 	entitlements: DotAvatarEntitlements = null
@@ -298,16 +279,8 @@ func validate(
 
 
 ## Repairs a document instead of refusing it, and reports what changed.
-##
-## [b]The difference between a schema change and every saved avatar breaking.[/b]
-## Retiring a part, renaming a slot or adding a required one all make existing
-## documents invalid, and refusing them means a player who has not logged in for a
-## month loads into an error. So a server conforms first and validates after: unknown
-## slots and parts are dropped, missing required slots take their default, entitlement
-## losses fall back.
-##
-## Returns the list of changes, so a caller can tell the player what happened rather
-## than silently redressing them.
+## So a schema change does not break every saved avatar: unknown slots and parts are dropped, missing required slots take their default, lost entitlements fall back.
+## Returns the changes so a caller can tell the player.
 func conform(
 	avatar: DotAvatar,
 	entitlements: DotAvatarEntitlements = null

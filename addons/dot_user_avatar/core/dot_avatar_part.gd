@@ -3,21 +3,11 @@ class_name DotAvatarPart
 extends Resource
 
 ## One thing a player can wear or be: a hair style, a jacket, a head shape.
-##
-## [b]A part is a description, not an asset.[/b] It names a piece of content by id and
-## says which slot it fits and how it may be coloured. Nothing here loads a mesh, and
-## a dedicated server holds the whole catalogue without holding a single vertex —
-## which is the property that makes validating an avatar cheap enough to do on every
-## join.
-##
-## The asset itself is resolved on the client through [DotAvatarCatalogue], which goes
-## to dot-cloud, which already verifies signed manifests and content hashes. A
-## cosmetic is content like any other and gets the same integrity guarantees.
+## A description, not an asset: it names content by id, so a dedicated server holds the whole catalogue without a vertex.
+## The asset is resolved on the client through [DotAvatarCatalogue] and dot-cloud.
 
 ## Stable identifier. Travels on the wire and is what entitlements key on.
-##
-## Never reassign one. A part id that changes meaning silently redresses everyone
-## wearing it, and an entitlement granted for the old meaning still applies.
+## Never reassign one: a changed meaning silently redresses everyone wearing it.
 @export var id: StringName = &""
 
 ## Which slot this occupies. Must exist in the schema.
@@ -29,39 +19,27 @@ extends Resource
 @export_group("Content")
 
 ## Content id resolved through dot-cloud. Empty means the part is built into the game.
-##
-## Kept as a plain string rather than a resource path so a server can carry it without
-## the asset existing in its build at all.
+## A plain string, not a resource path, so a server can carry it without the asset in its build.
 @export var content_id: String = ""
 
 ## Fallback part used when the content has not arrived yet.
-##
-## [b)Not optional in practice.[/b] A player whose cosmetic has not downloaded must
-## still be visible: an invisible player is a competitive advantage, and "wait for the
-## download" is not available when the download is somebody else's hat.
+## Not optional in practice: an invisible player is a competitive advantage, and nobody waits on someone else's hat.
 @export var fallback_id: StringName = &""
 
 @export_group("Colour")
 
 ## How many independently tintable channels this part has, 0 to 3.
-##
-## Bounded because the count is part of the wire format and because a part with a
-## dozen tintable regions is a material parameter set, not an avatar part.
+## Bounded because the count is part of the wire format.
 @export_range(0, 3, 1) var colour_channels: int = 0
 
 @export_group("Availability")
 
 ## Everybody has this part without owning it.
-##
-## The default is [b]false[/b]: a part nobody is entitled to is simply unwearable,
-## which is a safe failure. Defaulting to free would make a mis-tagged part wearable
-## by everyone, which is not.
+## Default [b]false[/b]: an untagged part is unwearable, a safe failure; defaulting to free would let a mis-tagged part be worn by everyone.
 @export var free: bool = false
 
 ## Hidden from the editor's list but still valid if already worn.
-##
-## For a retired seasonal item: the player who has it keeps it, and nobody new picks
-## it up. Removing the part outright would make their saved avatar invalid.
+## For a retired seasonal item: removing the part would invalidate saved avatars.
 @export var retired: bool = false
 
 ## Free-form tags for a game's own filtering.

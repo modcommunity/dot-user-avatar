@@ -1,9 +1,8 @@
 extends Node
 
-## Exercises everything in dot-user-avatar, offline: `godot --headless --path . res://examples/avatar_demo.tscn`
-## exits non-zero on any failure. The cases that matter most are the ones where a mistake is a
-## vulnerability rather than a crash: wearing what is not owned, a part in the wrong slot, an
-## index past the schema's end on the wire, a schema change making saved avatars unloadable.
+## Exercises everything in dot-user-avatar, offline: `godot --headless --path . res://examples/avatar_demo.tscn`, non-zero on failure.
+## The cases that matter most are where a mistake is a vulnerability: wearing what is not owned, a part in the wrong slot,
+## an index past the schema's end on the wire, a schema change making saved avatars unloadable.
 
 const ActionsSuite := preload("avatar_demo_actions.gd")
 
@@ -88,8 +87,6 @@ func _run() -> void:
 	get_tree().quit(1 if _failed > 0 else 0)
 
 
-# --- Assertions ------------------------------------------------------------
-
 func _section(title: String) -> void:
 	_entered += 1
 	print(title)
@@ -110,8 +107,6 @@ func _check(condition: bool, what: String, detail: String = "") -> bool:
 		print("  FAIL  %s%s" % [what, "" if detail == "" else " — " + detail])
 	return condition
 
-
-# --- Fixtures --------------------------------------------------------------
 
 ## A schema of the kind a game would ship.
 func _build_schema() -> DotAvatarSchema:
@@ -179,8 +174,6 @@ static func _key(seed_text: String) -> String:
 	return DotHash.sha256_text(seed_text).substr(0, 22)
 
 
-# --- Schema ----------------------------------------------------------------
-
 func _test_schema() -> void:
 	_section("schema")
 
@@ -246,8 +239,6 @@ func _test_schema() -> void:
 	_check(not offered_retired, "a retired part is not offered in the editor")
 	_done()
 
-
-# --- Document --------------------------------------------------------------
 
 func _test_document() -> void:
 	_section("document")
@@ -344,8 +335,6 @@ func _test_document() -> void:
 	_done()
 
 
-# --- Validation against the schema -----------------------------------------
-
 func _test_validation() -> void:
 	_section("validation")
 
@@ -431,8 +420,6 @@ func _test_validation() -> void:
 	_done()
 
 
-# --- Conforming ------------------------------------------------------------
-
 func _test_conform() -> void:
 	_section("conforming to a changed schema")
 
@@ -510,13 +497,8 @@ func _test_conform() -> void:
 	_done()
 
 
-# --- Wire ------------------------------------------------------------------
-
-## A stand-in for DotNetWriter / DotNetReader.
-##
-## dot-net is not installed here and must not be — the point is that this works
-## without it. But the duck-typed calls have to line up with the real thing, and a
-## typo in a method name is a runtime failure only a host game would ever see.
+## A stand-in for DotNetWriter / DotNetReader; dot-net is not installed here, but the duck-typed
+## calls must line up with the real thing, as a method-name typo only fails in a host game.
 class FakeWire extends RefCounted:
 	var values: Array = []
 	var _read_index := 0
@@ -597,8 +579,6 @@ func _test_wire() -> void:
 	_done()
 
 
-# --- Stores ----------------------------------------------------------------
-
 func _test_store_contract(store: DotAvatarStore, label: String) -> void:
 	_section("store contract")
 	print("store contract: %s" % label)
@@ -658,8 +638,6 @@ func _test_store_contract(store: DotAvatarStore, label: String) -> void:
 	_done()
 
 
-# --- Catalogue -------------------------------------------------------------
-
 func _test_catalogue() -> void:
 	_section("catalogue")
 
@@ -708,8 +686,6 @@ func _test_catalogue() -> void:
 	)
 	_done()
 
-
-# --- Builder ---------------------------------------------------------------
 
 func _test_builder() -> void:
 	_section("builder")
@@ -767,8 +743,6 @@ func _test_builder() -> void:
 	)
 	_done()
 
-
-# --- Manager ---------------------------------------------------------------
 
 func _make_manager(read_only: bool = false) -> DotAvatarManager:
 	var manager := DotAvatarManager.new()
@@ -1028,21 +1002,8 @@ func _test_manager_entitlements() -> void:
 	_done()
 
 
-# --- Backbone --------------------------------------------------------------
-
-## The backbone protocol, served from a dictionary.
-##
-## [b]Why a fake rather than a real request.[/b] Every check in this file is offline
-## and has to stay that way — a self-test that needs a server is a self-test nobody
-## runs — but a store that is never exercised is a store nobody has run either, and
-## [DotAvatarStoreBackbone] is the one place in this addon where a wrong PATH or a
-## mishandled status code is a silent, total failure on the join path.
-##
-## Extends [DotHttp] rather than duck-typing it, because [member
-## DotAvatarStoreBackbone.http] is typed and a store whose transport could be anything
-## is a store that cannot state what it needs. Overriding [method request] alone is
-## enough: [method DotHttp.get_json] and [method DotHttp.put_json] are both built on
-## it, so this covers all three verbs and the JSON parsing stays the real one.
+## The backbone protocol, served from a dictionary: offline, but [DotAvatarStoreBackbone] is where a wrong PATH or status code is silent and total.
+## Extends [DotHttp] (typed on the store) and overrides [method request] alone, so get_json/put_json keep the real JSON parsing.
 class FakeBackboneHttp extends DotHttp:
 	## user_key -> the stored DotAvatar.to_dict().
 	var avatars: Dictionary = {}
@@ -1079,10 +1040,7 @@ class FakeBackboneHttp extends DotHttp:
 			fail_next = false
 			return DotResult.failure(DotError.from_http(500, "boom"))
 
-		# The protocol's one address. Anything else is a client bug and is
-		# answered the way a real backbone would answer it, rather than being
-		# quietly tolerated by a fake that is more forgiving than the thing it
-		# stands in for.
+				# The protocol's one address; anything else is a client bug, answered as a real backbone would.
 		var parts := path.split("/", false)
 
 		if parts.size() != 3 or parts[0] != "user" or parts[2] != "avatar":
@@ -1125,12 +1083,8 @@ class FakeBackboneHttp extends DotHttp:
 		var rebuilt := DotAvatar.from_dict(avatars[key])
 		return (rebuilt.value as DotAvatar).digest() if rebuilt.ok else ""
 
-	## A success in the shape [method DotHttp.request] returns.
-	##
-	## Not just the bytes: `get_json` and `put_json` hand this to the REAL
-	## `_parse_json`, which reads `body_text` off a dictionary. Returning a bare
-	## PackedByteArray parses cleanly as a fake and fails against the thing it
-	## is standing in for, which is the one failure a fake must not have.
+		## A success in the shape [method DotHttp.request] returns, not just bytes:
+		## get_json and put_json hand this to the REAL `_parse_json`, which reads `body_text` off a dictionary.
 	static func _json(value: Variant) -> DotResult:
 		var text := JSON.stringify(value)
 
@@ -1196,10 +1150,8 @@ func _test_backbone_protocol() -> void:
 			"with the digest both sides compute independently"
 		)
 
-	# The one that matters: a backbone whose digest disagrees with ours breaks
-	# every client's cache invalidation and reports nothing, so the store warns.
-	# Here we only assert the publish still SUCCEEDS — the write did happen, and
-	# failing it afterwards would be a lie about what is stored.
+		# A backbone whose digest disagrees breaks every client's cache invalidation, so the store warns;
+		# here we assert only that the publish still succeeds, as the write did happen.
 	http.fail_next = true
 	var failed: DotResult = await store.store(key, a)
 	_check(not failed.ok, "a backbone error is reported rather than swallowed")
@@ -1244,34 +1196,19 @@ func _test_backbone_protocol() -> void:
 	_done()
 
 
-# --- Delivered content -----------------------------------------------------
-#
-# [b]This is the section that would have caught the hole it was written for.[/b] The
-# catalogue asked dot-cloud whether a part was mounted and never once asked it to fetch
-# one, so a part naming content that nothing had already downloaded resolved to "" for
-# the life of the process and every wearer quietly fell back to a stock part. Nothing
-# errored, because falling back IS the designed behaviour for content that has not
-# arrived -- the bug was that it could never arrive.
-#
-# The old catalogue test above cannot see it: it runs with NO cloud client, which is the
-# branch that returns "" correctly and passes. That is the same shape as dot-map's hole,
-# whose only loader test also ran with no cloud client and also passed for months.
+# Delivered content: the catalogue once asked dot-cloud whether a part was mounted and never to fetch it,
+# so every such wearer fell back silently. The catalogue test above runs with NO cloud client and cannot see it.
 
 
 ## The duck-typed interface [DotContent] speaks, and nothing else.
-##
-## A Node, and `ensure` awaits a frame, so the test drives a real coroutine rather than
-## a function that happens to return a value -- `await` on a non-coroutine is a no-op and
-## would prove nothing about the asynchronous path.
+## A Node whose `ensure` awaits a frame, so the test drives a real coroutine (`await` on a non-coroutine proves nothing).
 class StubCloud extends Node:
 	var mounted: Dictionary = {}
 	var asked: PackedStringArray = PackedStringArray()
 	var refuse: bool = false
 
-	## Where this pretends content lands. `res://examples` really exists and really
-	## contains `avatar_demo.tscn`, which stands in for a part scene: the catalogue
-	## checks the path with `ResourceLoader.exists`, so a fixture that is not there
-	## would fail for the wrong reason.
+		## Where this pretends content lands. `res://examples` exists and has `avatar_demo.tscn`,
+		## standing in for a part scene, since the catalogue checks the path with `ResourceLoader.exists`.
 	const PREFIX := "res://examples"
 
 	func ensure(
@@ -1385,17 +1322,9 @@ func _test_catalogue_delivery() -> void:
 	_done()
 
 
-# --- Agreement with the site ------------------------------------------------
-
 ## The digest, pinned to values the SITE computes, not to another Godot run.
-##
-## Every other digest check here compares this addon with itself, which is how
-## [method DotAvatar.filled_slots] sorting with [code]sort()[/code] went unseen: Godot
-## orders StringNames by where they were interned, so a document with face, top and legs
-## hashed [code]legs, face, top[/code] and disagreed with website-city (which sorts by
-## text), and every client would re-fetch every avatar on every join with nothing failing.
-## The expected values are website-city's own fixtures ([code]scripts/verify-avatar-backbone.ts[/code])
-## plus the document a dev site served in the round trip that found this.
+## Self-comparison missed `sort()` ordering StringNames by intern order; the values are website-city's fixtures
+## ([code]scripts/verify-avatar-backbone.ts[/code]) plus a dev-site round trip.
 func _test_digest_matches_site() -> void:
 	_section("digest matches the site")
 
@@ -1436,17 +1365,9 @@ func _test_digest_matches_site() -> void:
 	_done()
 
 
-# --- Backbone store transport -----------------------------------------------
-
 ## The backbone store's HTTP client has to be IN THE TREE to send anything.
-##
-## [DotHttp] is a Node whose requests are HTTPRequest children, and the store is a
-## RefCounted. It used to build an orphan client, so every read failed with engine error
-## 3 (Unconfigured) before reaching the network, and the manager gave every member the
-## game's default look. The fake client the rest of this suite uses overrides the request
-## and never noticed, so this drives the REAL [DotHttp]. Nothing here needs a backbone: a
-## closed loopback port answers "connection refused", which is a different error from
-## the one an orphan client gives.
+## [DotHttp] sends through HTTPRequest children; an orphan client failed every read with engine error 3.
+## The fake the rest of the suite uses never noticed, so this drives the REAL [DotHttp] against a closed loopback port ("connection refused" differs from error 3).
 func _test_backbone_transport() -> void:
 	_section("backbone store transport")
 

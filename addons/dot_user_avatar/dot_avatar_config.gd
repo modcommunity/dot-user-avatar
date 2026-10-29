@@ -26,31 +26,21 @@ extends DotConfig
 @export_group("Policy")
 
 ## Give a player with no avatar the schema's default and let them play.
-##
-## Off holds them at the profile stage until they make one, which is the platform
-## flow: sign in, no avatar, open the editor. On is what a game with a fixed cast
-## wants.
+## Off holds them at the profile stage until they make one (the platform flow); on suits a fixed cast.
 @export var allow_default_avatar: bool = true
 
 ## Repair an avatar that no longer fits the schema instead of refusing it.
-##
-## [b]On is strongly recommended.[/b] Retiring a part or adding a required slot makes
-## existing documents invalid, and refusing them means a player who has not logged in
-## for a month loads into an error rather than a slightly different hat.
+## On is strongly recommended: a returning player should load a slightly different hat, not an error.
 @export var conform_on_load: bool = true
 
 ## Check entitlements when validating. [b]Never turn this off on a server.[/b]
-##
-## It exists for a client previewing its own work and for a creator sandbox. A server
-## with it off accepts any avatar wearing anything.
+## For a client previewing or a creator sandbox; off, a server accepts any avatar wearing anything.
 @export var enforce_entitlements: bool = true
 
 @export_group("Limits")
 
 ## Avatar publishes allowed per player per minute.
-##
-## A client in the editor can publish on every slider drag. Without a limit that is a
-## store write per frame.
+## Without a limit, a slider drag in the editor is a store write per frame.
 @export_range(1, 240, 1) var publishes_per_minute: int = 10
 
 ## Avatars held in memory at once. 0 is unlimited.
@@ -80,10 +70,8 @@ func validate() -> DotResult:
 			)
 
 		if backbone_token.strip_edges() == "":
-			# Refused here as well as in the store, because this runs at STARTUP
-			# and the store does not open until the first player joins — so
-			# without it a misconfigured server looks healthy right up until
-			# somebody tries to play on it.
+			# Refused here as well as in the store: this runs at startup and the store opens at the first join,
+			# so a misconfigured server would look healthy until somebody tried to play.
 			return DotResult.fail(
 				DotError.CODE_AUTH,
 				"The backbone backend needs backbone_token.",

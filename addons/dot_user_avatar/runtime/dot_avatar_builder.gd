@@ -2,13 +2,8 @@ class_name DotAvatarBuilder
 extends RefCounted
 
 ## Applies an avatar document to a character rig.
-##
-## [b]Split into a plan and an application, and the split is what makes it
-## testable.[/b] Working out which parts go where, in what order, with which colours,
-## and which have fallen back to a placeholder is pure logic over ids; instantiating
-## scenes and reparenting nodes is not. So [method plan] answers the first with no
-## scene at all and [method apply] does the second, and the self-test exercises the
-## logic headless where a failure has one cause.
+## Split into plan and application: [method plan] is pure logic over ids with no scene, so the self-test exercises it headless;
+## [method apply] instantiates scenes and reparents nodes.
 
 const CHANNEL := "avatar.builder"
 
@@ -42,10 +37,7 @@ class Step extends RefCounted:
 
 
 ## Works out what to build, touching no nodes.
-##
-## Slots hidden by another slot's [member DotAvatarSlot.hides] are dropped here rather
-## than left for the renderer, so a caller counting steps sees what will actually
-## appear.
+## Slots hidden by another slot's [member DotAvatarSlot.hides] are dropped here so a caller counting steps sees what will appear.
 static func plan(
 	avatar: DotAvatar,
 	schema: DotAvatarSchema,
@@ -103,13 +95,8 @@ static func plan(
 
 
 ## Builds the plan under [param rig].
-##
-## Every slot's node is cleared and rebuilt, so applying a second avatar to the same
-## rig is well defined — which matters more than it sounds, because a player changing
-## a hat in the editor does exactly that, several times a second.
-##
-## Returns how many slots were shown. A slot whose content is missing contributes a
-## placeholder if one is supplied and nothing otherwise.
+## Every slot's node is cleared and rebuilt, so applying a second avatar to a rig is well defined (the editor does it several times a second).
+## Returns how many slots were shown; missing content contributes the placeholder if one is supplied.
 static func apply(
 	steps: Array[Step],
 	rig: Node3D,
@@ -157,11 +144,7 @@ static func apply(
 
 
 ## Applies a slot's colours to whatever the part instantiated.
-##
-## Written to the material's shader parameters rather than by swapping materials, so a
-## part with one mesh and three tintable regions does not need three materials — and
-## so two players wearing the same part do not share a material and recolour each
-## other, which is what happens when a [Resource] loaded from disk is edited in place.
+## Written to shader parameters, not by swapping materials, so one mesh with three regions needs one material and two wearers do not share (and recolour) a loaded [Resource].
 static func _tint(instance: Node, colours: Array) -> void:
 	if colours.is_empty():
 		return
@@ -184,28 +167,8 @@ static func _tint_recursive(node: Node, channel: int, colour: Color) -> void:
 
 
 ## The same plan as plain dictionaries, for dot-player-char to build.
-##
-## [b]This is the seam between the two addons, and it is one-directional by design.[/b]
-## Working out which parts go where is this addon's job and must stay here: the whole
-## promise of dot-user-avatar is that a dedicated server can validate an avatar from ids
-## without holding any art, and a planner that lived in a rendering addon would be a
-## planner a server had to install a rendering addon to run.
-##
-## Instantiating scenes and reparenting nodes is not this addon's job, and used to be
-## anyway — [method apply] below is that work, written when there was nowhere else for
-## it. dot-player-char now has the general version, which a character's own
-## customisation document, a class's model and a loadout's view model all share, and
-## [code]DotPlayerModelBuilder.from_plan[/code] consumes exactly what this returns.
-##
-## Neither addon imports the other. A game with both calls:
-##
-## [codeblock]
-## var steps := DotPlayerModelBuilder.from_plan(DotAvatarBuilder.plan_dicts(plan))
-## DotPlayerModelBuilder.apply(steps, rig, placeholder)
-## [/codeblock]
-##
-## A game with only this one goes on calling [method apply], which still works and is
-## still tested.
+## The planner stays here so a server validates from ids without a rendering addon; [code]DotPlayerModelBuilder.from_plan[/code] consumes this and neither addon imports the other.
+## [method apply] still works for a game with only this addon; usage in docs/integration.md.
 static func plan_dicts(steps: Array[Step]) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 

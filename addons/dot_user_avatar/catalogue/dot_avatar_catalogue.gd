@@ -1,54 +1,29 @@
 class_name DotAvatarCatalogue
 extends RefCounted
 
-## Turns a part id into something a client can actually render.
-##
-## [b]The client's half of the split.[/b] A server holds the schema and never resolves
-## anything; a client holds the schema too and resolves part ids to content through
-## dot-cloud, which already verifies signed manifests and content hashes. A cosmetic
-## is content like any other and gets the same integrity guarantees as a map.
-##
-## [b]dot-cloud is not imported.[/b] The client is duck-typed: anything with
-## [code]resolve(content_id)[/code] returning a path, or [code]has(content_id)[/code],
-## works. Found through [DotRegistry] under [code]dot_cloud_client[/code] when it is
-## installed, and absent it falls back to built-in paths — which is what a game that
-## ships its cosmetics in the build wants and what every test wants.
+## Turns a part id into something a client can render, through dot-cloud (signed manifests, content hashes).
+## Duck-typed, never imported: anything with [code]resolve(content_id)[/code] or [code]has(content_id)[/code]
+## found under [code]dot_cloud_client[/code] works; absent it, built-in paths are used.
 
 ## Emitted when content a part was waiting on has arrived and the part now resolves.
-##
-## [b]Without this, a cosmetic that downloads mid-game is never drawn.[/b] Resolving is
-## synchronous because it happens while a character is being dressed, so a miss can only
-## answer "not yet" — and something has to say when "yet" arrives. A renderer connects
-## this and re-dresses whoever is wearing the part; a loading indicator connects it to
-## take the part off its list.
+## Resolving is synchronous (it happens while dressing a character), so a miss can only say "not yet";
+## a renderer connects this to re-dress whoever wears the part.
 signal part_ready(part_id: StringName)
 
 ## Fetch content on a resolve miss, rather than only resolving what is already mounted.
-##
-## [b]On, because off was the old behaviour and off is invisible.[/b] This catalogue
-## asked dot-cloud [i]whether[/i] a part was mounted and never asked it to fetch one, so
-## a part naming content nothing had downloaded resolved to "" forever and every wearer
-## fell back to a stock part. The fallback is working-as-designed, so nothing errored and
-## nothing warned: a developer could publish a cosmetic, wire it correctly, and watch it
-## silently never appear. dot-map had the same hole with the ends one step further apart
-## and it hid for months. Turn this off for a game that drives its own fetching and wants
-## the catalogue to do nothing behind its back.
+## On because a miss otherwise resolved to "" forever and every wearer silently fell back to a stock part.
+## Turn off for a game that drives its own fetching.
 var auto_fetch: bool = true
 
 const CHANNEL := "avatar.catalogue"
 
 ## Registry name dot-cloud publishes itself under.
-##
-## Kept for [method describe] and for a game that reaches the client directly. The
-## fetching itself goes through [DotContent], which is the family's one caller for
-## downloadable content and is duck-typed against the same service.
+## Kept for [method describe]; fetching goes through [DotContent], the family's one caller for downloadable content.
 const CLOUD_SERVICE := &"dot_cloud_client"
 
-## Where built-in parts live when a part names no content id.
-##
-## The id is appended, so [code]hair_long[/code] becomes
-## [code]res://avatars/hair_long.tscn[/code]. A game with a different layout sets
-## [member resolver] instead of renaming its files.
+## Where built-in parts live when a part names no content id; the id is appended
+## ([code]hair_long[/code] -> [code]res://avatars/hair_long.tscn[/code]).
+## A different layout sets [member resolver] instead of renaming files.
 var builtin_prefix: String = "res://avatars/"
 
 var builtin_suffix: String = ".tscn"
@@ -66,10 +41,7 @@ var _cloud_checked: bool = false
 var _cache: Dictionary = {}
 
 ## Part id -> the [DotAvatarPart], for parts whose content has not arrived.
-##
-## The PART and not merely a marker, because when its content lands something has to
-## re-resolve it, and an id alone cannot be re-resolved. [method pending] returns the
-## keys, so it is unchanged by this.
+## The part, not a marker, because arrival has to re-resolve it and an id alone cannot be.
 var _pending: Dictionary = {}
 
 ## content id -> true while a fetch for it is in flight, so a part that is asked for
@@ -91,10 +63,7 @@ func _cloud_client() -> Object:
 
 
 ## Where a part's scene lives, or "" when it is not available yet.
-##
-## [b)Returning "" is a normal outcome, not a failure.[/b] A cosmetic somebody else is
-## wearing may not have downloaded yet, and the answer then is to use the fallback and
-## try again later — never to leave the player invisible.
+## "" is normal, not a failure: use the fallback and retry later, never leave the player invisible.
 func resolve(part: DotAvatarPart) -> String:
 	if part == null:
 		return ""
@@ -129,11 +98,8 @@ func _resolve_uncached(part: DotAvatarPart) -> String:
 	if mounted != "":
 		return mounted
 
-	# Not here yet. [b]Ask for it[/b] — this is the line that did not exist, and without
-	# it a part naming content that nobody had already mounted was unreachable for the
-	# life of the process. The fetch is deliberately not awaited: resolving happens
-	# mid-draw and must answer now, so the answer is "not yet" and [signal part_ready]
-	# is how "yet" arrives.
+	# Ask for it. The fetch is not awaited: resolving happens mid-draw and must answer now,
+	# so the answer is "not yet" and [signal part_ready] is how "yet" arrives.
 	if auto_fetch:
 		_fetch(part)
 
@@ -141,10 +107,7 @@ func _resolve_uncached(part: DotAvatarPart) -> String:
 
 
 ## The part actually used for a slot, walking the fallback chain.
-##
-## [b]The chain is bounded and the bound is not paranoia.[/b] Two parts naming each
-## other as fallbacks is a content-authoring mistake that would otherwise hang the
-## renderer, and content is authored by people who are not looking at this code.
+## The chain is bounded: parts naming each other as fallbacks is an authoring mistake that would otherwise hang the renderer.
 func resolve_with_fallback(
 	part: DotAvatarPart,
 	schema: DotAvatarSchema,
@@ -172,18 +135,8 @@ func resolve_with_fallback(
 
 
 ## Where [param part]'s scene is inside mounted content at [param path], or "".
-##
-## [b]The mount is usually a DIRECTORY and the answer has to be a FILE.[/b] dot-cloud
-## answers with the entry path when a manifest names one and with the mount prefix when
-## it does not, so both arrive here — and a prefix is a directory, which
-## [method ResourceLoader.exists] says nothing exists at. Accepting the client's answer
-## unchanged therefore rejected every pack that did not name an entry, re-fetched it on
-## the next resolve, and did that for every draw: found by running the suite, which
-## counted two fetches for one part.
-##
-## The part's own scene under the prefix is tried first, because that is the layout
-## [member builtin_prefix] already describes for a build that ships its parts — one
-## naming rule whether a part is delivered or not.
+## The mount is usually a directory and the answer must be a file, so a bare prefix is not accepted as-is
+## (it would re-fetch every draw); the part's own scene under it is tried first, matching [member builtin_prefix].
 func _scene_in(path: String, part: DotAvatarPart) -> String:
 	if path == "" or part == null:
 		return ""
@@ -202,10 +155,7 @@ func _scene_in(path: String, part: DotAvatarPart) -> String:
 
 
 ## Download the content [param part] needs, then re-resolve everything waiting on it.
-##
-## Started from a resolve miss and never awaited by the caller — see the note there.
-## Safe to call repeatedly: [method DotContent.ensure] is idempotent, and [member
-## _fetching] keeps a part that is asked for every frame from starting a fetch per frame.
+## Never awaited by the caller; idempotent, and [member _fetching] stops a part asked for every frame fetching every frame.
 func _fetch(part: DotAvatarPart) -> void:
 	if part == null or part.content_id == "":
 		return
@@ -228,17 +178,9 @@ func _fetch(part: DotAvatarPart) -> void:
 	_fetching.erase(content)
 
 	if not res.ok:
-		# Warned, not failed. Every wearer is already drawing a fallback, so the game
-		# carries on looking slightly wrong rather than stopping — but a cosmetic that
-		# cannot be fetched is a thing an operator wants in the log exactly once.
-		# `res.error` is the DotError; the message and the code live on IT, not on the
-		# result. Reading `res.message` here threw, and the way that surfaced is worth
-		# keeping: the throw aborted THIS coroutine only -- it is detached, because a
-		# resolve miss starts it without awaiting -- so the suite still printed
-		# "151 passed, 0 failed" and exited 0 with a SCRIPT ERROR in its stderr. The
-		# line that failed was the one explaining why a download failed, which is the
-		# line somebody is reading precisely when everything else has already gone
-		# wrong. Read a suite's stderr even when it exits 0.
+		# Warn once and carry on: every wearer is already drawing a fallback. The error code and message
+		# live on `res.error`, not `res`; reading `res.message` aborted this detached coroutine
+		# while the suite still exited 0, so read stderr.
 		DotLog.warn(CHANNEL, "could not fetch avatar content", {
 			"content": String(content),
 			"code": res.error.code if res.error != null else "",
@@ -249,13 +191,8 @@ func _fetch(part: DotAvatarPart) -> void:
 	_content_arrived(content)
 
 
-## Re-resolve every pending part that was waiting on [param content], and announce the
-## ones that now resolve.
-##
-## [b]Only the misses are dropped, not the whole cache.[/b] [method invalidate] clears
-## everything and is right after a mount nobody was expecting; here the arrival is known,
-## so throwing away resolutions that are still correct would make every other character
-## in the scene re-resolve for nothing.
+## Re-resolve every pending part that was waiting on [param content], and announce the ones that now resolve.
+## Only the misses are dropped, not the whole cache ([method invalidate]), so other characters do not re-resolve for nothing.
 func _content_arrived(content: StringName) -> void:
 	var ready: Array[StringName] = []
 
@@ -286,10 +223,7 @@ func _content_arrived(content: StringName) -> void:
 
 
 ## Fetch everything currently pending, and wait for all of it.
-##
-## The batched half of [member auto_fetch], for a caller that would rather block a
-## loading screen once than watch characters change clothes as packs land. Returns how
-## many parts became resolvable.
+## The batched half of [member auto_fetch], for a loading screen. Returns how many parts became resolvable.
 func fetch_pending() -> int:
 	var before := _pending.size()
 
@@ -324,19 +258,13 @@ func is_pending(part_id: StringName) -> bool:
 
 
 ## Drops resolutions. Call after mounting or releasing content.
-##
-## Godot can never unmount a resource pack, so a path that resolved once keeps
-## resolving — but a path that did [i]not[/i] resolve may start to, and a cache with
-## no way to forget a miss would keep a player in their fallback for the rest of the
-## session.
+## A pack can never be unmounted, but a path that did not resolve may start to, and without this a miss would pin a player to their fallback.
 func invalidate() -> void:
 	_cache.clear()
 	_pending.clear()
 	_cloud_checked = false
-	# Not the in-flight set. A fetch that is still running will finish and call
-	# [method _content_arrived] against a _pending that has been emptied, which resolves
-	# nothing and emits nothing -- correct. Clearing it here would instead let the next
-	# resolve start a SECOND fetch for content already on its way.
+	# Not the in-flight set: a running fetch finishes against an empty _pending (resolves nothing, correct);
+	# clearing it here would let the next resolve start a second fetch for content already on its way.
 
 
 func describe() -> Dictionary:

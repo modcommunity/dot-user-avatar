@@ -2,10 +2,7 @@
 extends EditorPlugin
 
 ## Editor entry point for dot-user-avatar. Registers inspector types only.
-##
-## No autoload, for the family's reason: a process may run a server and a client at
-## once, and a singleton avatar manager makes that impossible. [DotAvatarManager]
-## registers itself in [DotRegistry] instead.
+## No autoload: a process may run a server and a client at once. [DotAvatarManager] registers in [DotRegistry] instead.
 
 const _ICON := "res://addons/dot_user_avatar/icon_placeholder.svg"
 

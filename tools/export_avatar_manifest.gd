@@ -2,37 +2,9 @@
 extends EditorScript
 
 ## Exports a [DotAvatarSchema] as a WEB avatar manifest plus one GLB per part.
-##
-## [b]Run it from the editor:[/b] open this file and press [b]File → Run[/b].
-## It is an [EditorScript] rather than a headless tool because exporting a scene
-## to glTF needs the editor's own [GLTFDocument] importer state, which does not
-## exist in a `--headless --script` run.
-##
-## [b]What it is for.[/b] This addon describes an asset set for a SERVER — a flat
-## list of parts, each naming its own scene, so a match can decide whether an
-## avatar is legal without holding any art. A web editor needs the same set
-## described for a BROWSER: which slots a person picks from, what colours are
-## offered, and a file it can actually draw. The two are the same content and
-## nobody should be maintaining two copies of it, so this derives the second from
-## the first.
-##
-## The mapping it applies is the exact inverse of the one the website applies to
-## come back the other way. If you change one, change both:
-## [code]docs/avatar-assets.md[/code] and [code]~/types/avatar/godot.ts[/code] on
-## the backbone.
-##
-## [b]Two things it cannot decide for you[/b], and both are marked TODO in the
-## output rather than guessed at:
-##
-## - [b]The palette.[/b] A part says it has one colour channel; it does not say
-##   which colours to offer. A default ramp is written and is meant to be edited
-##   — it is the only choice a member has for that slot, so it is a design
-##   decision and not a derivation.
-## - [b]Whether a part is free.[/b] Everything is exported free, because
-##   entitlements are a commerce system this addon deliberately does not have.
-##   If your backbone sells cosmetics, that belongs there.
+## Run from the editor (File -> Run): glTF export needs the editor's [GLTFDocument] importer state, absent in `--headless --script`.
+## The mapping inverts the website's ([code]docs/avatar-assets.md[/code], [code]~/types/avatar/godot.ts[/code]); change both. Palette and free/paid are TODO in the output, as the schema cannot say.
 
-# --- Configure -------------------------------------------------------------
 
 ## The schema to export.
 const SCHEMA_PATH := "res://content/avatar/humanoid.tres"
@@ -41,17 +13,11 @@ const SCHEMA_PATH := "res://content/avatar/humanoid.tres"
 const OUT_DIR := "res://export/avatar"
 
 ## Prefix every emitted URL with this.
-##
-## Leave empty for paths relative to the manifest, which is what a static host
-## serving the whole directory wants — the backbone resolves a relative
-## `modelUrl` against the manifest's own address.
+## Empty gives paths relative to the manifest, which the backbone resolves against the manifest's address.
 const BASE_URL := ""
 
 ## Geometry belonging to no slot: the head, the hands, the eyes.
-##
-## Exported as one `base.glb` and named as the manifest's `modelUrl`. A web
-## manifest needs a body to hang parts on and the schema has no concept of one,
-## because a server never draws anybody.
+## Exported as one `base.glb` and named as the manifest's `modelUrl`; the schema has no body concept because a server never draws anybody.
 const BASE_SCENE_PATH := "res://content/avatar/base.tscn"
 
 ## Written onto every slot that has colour channels. Edit afterwards.
@@ -60,7 +26,6 @@ const DEFAULT_PALETTE := [
 	"#2b4c7e", "#0f766e", "#7a1f2b", "#b45309",
 ]
 
-# ---------------------------------------------------------------------------
 
 func _run() -> void:
 	var schema: DotAvatarSchema = load(SCHEMA_PATH)
@@ -98,10 +63,8 @@ func _run() -> void:
 		for candidate in schema.parts_for(slot.id):
 			var part := candidate as DotAvatarPart
 
-			# A retired part is content that still has to RESOLVE — existing
-			# documents name it — but must not be offered to somebody choosing.
-			# The web manifest has no way to say "resolvable but unlisted", so
-			# it is left out and the backbone's coercion handles the documents.
+						# A retired part must still resolve (documents name it) but not be offered; the web manifest
+						# cannot say "resolvable but unlisted", so it is left out and the backbone's coercion handles the documents.
 			if part.retired:
 				continue
 
@@ -139,12 +102,7 @@ func _run() -> void:
 	print("export: %d parts in %d slots" % [exported, slots.size()])
 
 	if not skipped.is_empty():
-		# Named, not counted. A part missing from the web set is a part members
-		# cannot wear on the site while their game shows it, and "3 skipped" is
-		# not something anybody can act on.
-		# print, not push_warning: every other line this tool emits is stdout, and a
-		# warning that arrives in a different stream with a backtrace on it is the one
-		# line of the report nobody reads in order.
+				# Named, not counted: members cannot act on "3 skipped". print, not push_warning, to stay in stdout order.
 		print(
 			"export: no scene for %s — these parts are absent from the manifest"
 			% ", ".join(skipped)
@@ -242,11 +200,7 @@ func _slot_dict(
 
 
 ## The option key for a part, which is its id minus the `slot.` prefix.
-##
-## The backbone builds part ids as `<slot>.<option>`, so stripping the prefix
-## here is what makes a round trip land back on the id you started with. A part
-## id that does not carry it is used whole, which still round-trips — the
-## backbone hashes anything that will not fit and keeps a map either way.
+## The backbone builds ids as `<slot>.<option>`; an id without the prefix is used whole and still round-trips.
 static func _option_key(slot: DotAvatarSlot, part: DotAvatarPart) -> String:
 	var id := String(part.id)
 	var prefix := "%s." % slot.id
@@ -255,11 +209,7 @@ static func _option_key(slot: DotAvatarSlot, part: DotAvatarPart) -> String:
 
 
 ## Where a part's scene lives.
-##
-## `content_id` is an address for dot-cloud, not a `res://` path, so it is only
-## usable here when it happens to be one. Otherwise the convention is
-## `res://content/avatar/parts/<part id>.tscn`, and a part with neither is
-## reported rather than silently dropped.
+## `content_id` is a dot-cloud address, usable only when it is a `res://` path; else `res://content/avatar/parts/<part id>.tscn`, and a part with neither is reported.
 static func _scene_for(part: DotAvatarPart) -> String:
 	if part.content_id.begins_with("res://") and ResourceLoader.exists(part.content_id):
 		return part.content_id

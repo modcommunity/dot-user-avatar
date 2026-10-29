@@ -2,47 +2,25 @@ class_name DotAvatarSync
 extends RefCounted
 
 ## Moving avatars between machines: the wire format, and the backbone endpoints.
-##
-## [b]dot-net is not a dependency and is not imported.[/b] The family rule, and in
-## GDScript not merely a preference: a script that so much as [i]mentions[/i] a
-## [code]class_name[/code] the project does not have fails to parse and takes
-## everything referencing it down too. So the writer and reader here are typed
-## [Variant] and their methods are called by name, exactly as
-## [code]DotTransportENet[/code] reaches ENet through [method ClassDB.instantiate].
-##
-## [b]An avatar is not replicated like movement.[/b] It changes when a player opens
-## the editor and never otherwise, so it travels once on join and then only on change.
-## What every other client actually needs continuously is the [i]digest[/i] — sixteen
-## characters saying which avatar this is — so a scoreboard of thirty players carries
-## thirty digests and fetches only the documents it does not already hold.
+## dot-net is not imported: a script naming a class the project lacks fails to parse, so writer and reader are typed [Variant] and called by name, as [code]DotTransportENet[/code] reaches ENet.
+## An avatar changes only in the editor, so it travels once on join; every client needs continuously only the 16-character digest.
 
-# No log channel: a static wire codec and two HTTP helpers, all returning a DotResult. A
-# codec that logged would write a line per hostile packet from a context with nothing to
-# name, and the helpers' only caller is DotAvatarStoreBackbone, whose failures the store
-# base logs with the player's key.
+# No log channel: a static codec that logged would write a line per hostile packet with nothing to name;
+# the helpers' only caller is DotAvatarStoreBackbone, whose store base logs failures with the key.
 
 ## Bits for the slot count in a packed document.
 const COUNT_BITS := 5
 
 ## Bits per id index. Ids travel as indices into the schema, not as strings.
-##
-## [b]This is what makes an avatar affordable to send.[/b] A document with eight slots
-## as strings is several hundred bytes; as indices it is about twenty. It also means a
-## client cannot invent a part id that is not in the schema, because there is no way
-## to express one.
+## Eight slots cost about twenty bytes instead of several hundred, and a client cannot express a part id outside the schema.
 const INDEX_BITS := 12
 
 ## Bits per colour component.
 const COLOUR_BITS := 8
 
 
-# --- Wire format -----------------------------------------------------------
-
 ## Packs an avatar as indices into [param schema].
-##
-## Both peers must hold the same schema, which they do: it is content, delivered the
-## same way the meshes are. A mismatch is caught by the digest rather than producing a
-## plausible wrong avatar, which is why [method write] emits one.
+## Both peers hold the same schema (it is content); a mismatch is caught by the digest [method write] emits, not a plausible wrong avatar.
 static func write(
 	avatar: DotAvatar,
 	schema: DotAvatarSchema,
@@ -97,11 +75,7 @@ static func write(
 
 
 ## Reads an avatar back. Every index is checked against the schema.
-##
-## [b]Everything here arrived from another machine.[/b] An index past the end of the
-## slot or part list is not a crash to guard against so much as the obvious thing to
-## send, so it is refused rather than clamped: clamping would silently dress the
-## player in whatever part happens to sit at the boundary.
+## It arrived from another machine: an out-of-range index is refused, not clamped, which would dress the player in the boundary part.
 static func read(schema: DotAvatarSchema, reader: Variant) -> DotResult:
 	if schema == null:
 		return DotResult.fail(DotError.CODE_INVALID, "No schema to read against.")
@@ -176,13 +150,8 @@ static func estimated_bits(slots: int) -> int:
 	)
 
 
-# --- Backbone --------------------------------------------------------------
-
 ## Fetches a player's avatar over the open HTTP protocol.
-##
-## [param http] is a [DotHttp]. Kept as a parameter rather than owned so a caller can
-## share one client, its retry policy and its connection pool across every backbone
-## call the process makes.
+## [param http] is a [DotHttp], a parameter so a caller can share one client, retry policy and pool across backbone calls.
 static func fetch(
 	http: DotHttp,
 	user_key: String,
@@ -216,10 +185,8 @@ static func fetch(
 
 	var data := body as Dictionary
 
-	# [b]The site answers every member, saved or not.[/b] One who never opened its
-	# editor gets the site's default document with `saved: false`; read as theirs, it
-	# made every such member the same person in every game, where the game's own stock
-	# look would have told them apart. Unsaved is no avatar, which is the game's call.
+		# The site answers every member; a never-saved one gets its default with `saved: false`.
+		# Read as theirs, it made every such member the same person in every game. Unsaved is no avatar.
 	if data.get("saved", true) == false:
 		return DotResult.success(null)
 
@@ -262,17 +229,8 @@ static func fetch_wearables(http: DotHttp, user_key: String, headers: Dictionary
 
 
 ## Publishes a player's avatar.
-##
-## [b]The backbone validates too.[/b] This is a client or a server acting for a
-## player, and neither is the authority: a backbone that trusted a published document
-## would accept an avatar wearing items the player does not own, from anyone who can
-## reach the endpoint.
-## [param extra] is merged into the body before it is sent.
-##
-## For the replay fields a backbone may check — a Unix-SECONDS `ts` and a random
-## `nonce`. They are not part of the document and a backbone that does not check
-## them ignores them, which is why they are a parameter here rather than fields on
-## [DotAvatar]: the document is what a player looks like, and a timestamp is not.
+## The backbone validates too: neither a client nor a server acting for a player is the authority.
+## [param extra] is merged into the body: replay fields (Unix-SECONDS `ts`, random `nonce`), not part of the document.
 static func publish(
 	http: DotHttp,
 	user_key: String,
@@ -303,13 +261,8 @@ static func publish(
 	if not res.ok:
 		return res.wrap("Could not publish the avatar.")
 
-	# The BACKBONE's digest when it reported one, ours otherwise.
-	#
-	# A backbone that computes a different sixteen characters from the same
-	# document is a serious fault — the digest is the whole mechanism by which a
-	# client knows its cached copy of another player is stale — and returning our
-	# own unconditionally would hide it behind a value that always agrees with
-	# itself. The caller compares them; see DotAvatarStoreBackbone._store.
+	# The backbone's digest when it reported one, ours otherwise: a different digest from the same document
+	# is a serious fault that returning ours would hide. The caller compares; see DotAvatarStoreBackbone._store.
 	var answer: Variant = res.value
 
 	if answer is Dictionary and (answer as Dictionary).has("digest"):

@@ -2,67 +2,28 @@ class_name DotAvatarStoreBackbone
 extends DotAvatarStore
 
 ## Avatars over the open HTTP protocol, so they follow a player between servers.
-##
-## [b]The protocol is the product here.[/b] TMC runs an instance and anyone can run
-## their own, which is only true if the reference implementation is the thing TMC
-## runs and if a self-hoster gets the same functionality rather than a degraded
-## version. So this speaks three boring endpoints and has no opinion about storage:
-##
-## [codeblock]
-## GET    /user/{key}/avatar     read a player's avatar
-## PUT    /user/{key}/avatar     publish it
-## DELETE /user/{key}/avatar     erase it
-## [/codeblock]
-##
-## The full specification, including the schema endpoint a client fetches at startup
-## and the reason [param user_key] is a scoped derivation rather than an account id,
-## is published at [code]docs/api/avatar-protocol.md[/code] on the backbone.
-##
-## [b]What this must never do is hold a credential that works anywhere else.[/b] A
-## game server running this holds a server token scoped to reading and writing
-## avatars for players connected to it, and nothing more. The moment a server can
-## present a player's own account token, every operator has a live credential for
-## every player's whole account — which is the exact failure dot-auth's ticket flow
-## exists to prevent. Same rule, same wording, as [DotUserStoreBackbone]; the two are
-## deliberately separate classes because this addon does not depend on dot-user.
-##
-## [b]The wire format is [method DotAvatar.to_dict], not this addon's packed one.[/b]
-## [DotAvatarSync.write] exists for the match, where a document travels to thirty
-## peers many times a second and indices into the schema are worth the coupling. A
-## backbone is asked once per player per join, JSON is what an HTTP API elsewhere can
-## read, and — the deciding reason — index-based encoding requires both ends to hold
-## the SAME schema, which a backbone serving several games does not.
+## GET, PUT, DELETE on [code]/user/{key}/avatar[/code], no opinion about storage; spec in [code]docs/api/avatar-protocol.md[/code] on the backbone.
+## The server token is scoped to connected players' avatars and works nowhere else, as in [DotUserStoreBackbone]. Wire is [method DotAvatar.to_dict] JSON, since [DotAvatarSync.write] indices need both ends to share a schema.
 
 const BACKBONE_CHANNEL := "avatar.store.backbone"
 
 ## Where the backbone lives. Required.
 var base_url: String = ""
 
-## Token identifying this server to the backbone.
-##
-## [b]Not a player credential.[/b] See the class documentation. Never logged, never
-## sent to a client, and refused from the environment and argv by
-## [method DotAvatarConfig.sensitive_keys] for the usual reason: both are readable by
-## other processes and end up in pasted bug reports.
+## Token identifying this server to the backbone. Not a player credential.
+## Never logged or sent to a client, and refused from environment and argv by [method DotAvatarConfig.sensitive_keys].
 var server_token: String = ""
 
 ## HTTP client. One is built if none is supplied.
-##
-## A parameter rather than owned outright so a host can share one client, its retry
-## policy and its connection pool across every backbone call the process makes.
+## A parameter so a host can share one client, retry policy and pool across backbone calls.
 var http: DotHttp = null
 
-## Whether writes are permitted. A read-only mirror is a legitimate deployment, and
-## most servers should read avatars and never publish them — but the default matches
-## [member DotAvatarConfig.read_only] rather than being safer than it, because a store
-## quietly stricter than the configuration it was built from is a setting that does
-## nothing.
+## Whether writes are permitted. A read-only mirror is a legitimate deployment.
+## The default matches [member DotAvatarConfig.read_only], not stricter: a store stricter than its configuration is a setting that does nothing.
 var read_only: bool = false
 
 ## Seconds a request may take before it is abandoned.
-##
-## Short, because this is on the join path: a player waiting on a backbone that is
-## not answering should be admitted with a default avatar rather than held.
+## Short, because this is on the join path: admit with a default avatar rather than hold the player.
 var timeout_sec: float = 8.0
 
 ## Whether [member http] was built (and parented to the root) by this store, so
@@ -101,10 +62,8 @@ func _open() -> DotResult:
 			DotError.CODE_INVALID, "The backbone URL needs a scheme.", base_url
 		)
 
-	# Plain HTTP carries the server token in the clear, and that token can read
-	# every connected player's avatar. Refusing outright would break local
-	# development against a loopback backbone, so it is a warning — but a loud
-	# one, because the failure is silent and total.
+		# Plain HTTP sends the server token in the clear and it can read every connected player's avatar.
+		# Refusing would break loopback development, so warn, loudly, because the failure is silent and total.
 	if base_url.begins_with("http://") and not _is_loopback(base_url):
 		DotLog.warn(
 			BACKBONE_CHANNEL,
@@ -125,14 +84,9 @@ func _open() -> DotResult:
 	http.base_url = base_url
 	http.timeout_sec = timeout_sec
 
-	# [b]DotHttp is a Node and sends through HTTPRequest children, which only work
-	# inside the tree.[/b] This store is a RefCounted with no tree of its own, and an
-	# orphan client fails every request with engine error 3 (Unconfigured) before
-	# touching the network -- so this store did, on every read, and the manager gave
-	# every member the game's default look with nothing but a WARN to say why. Parented
-	# to the root, deferred because open() may run inside somebody's _ready while the
-	# root is busy adding children, then awaited a frame so the first request already
-	# finds it in the tree. The same fix as dot-user's DotUserStoreBackbone.
+		# DotHttp is a Node and sends through HTTPRequest children, which only work in the tree; an orphan
+		# client fails every request with engine error 3. Parent to the root, deferred (open() may run inside
+		# _ready), then await a frame. Same fix as dot-user's DotUserStoreBackbone.
 	if not http.is_inside_tree():
 		var tree := Engine.get_main_loop() as SceneTree
 
@@ -180,19 +134,14 @@ func _headers() -> Dictionary:
 
 
 ## Reads a player's avatar.
-##
-## Delegates to [method DotAvatarSync.fetch] rather than repeating the request here,
-## so the 404-means-no-avatar rule and the payload unwrapping live in one place and
-## a client and a server cannot disagree about them.
+## Delegates to [method DotAvatarSync.fetch] so the 404-means-no-avatar rule lives in one place.
 func _fetch(user_key: String) -> DotResult:
 	return await DotAvatarSync.fetch(http, user_key, _headers())
 
 
 func _store(user_key: String, avatar: DotAvatar) -> DotResult:
-	# The replay fields, which are free to send and close a real gap: without a
-	# `ts` a backbone has nothing to bound how long a captured publish stays
-	# useful. Unix SECONDS — milliseconds are refused by a window check, which is
-	# a mistake worth making impossible here rather than at every call site.
+		# Replay fields: without a `ts` a backbone cannot bound how long a captured publish stays useful.
+		# Unix SECONDS, as milliseconds are refused by the window check.
 	var res: DotResult = await DotAvatarSync.publish(
 		http,
 		user_key,
@@ -207,12 +156,8 @@ func _store(user_key: String, avatar: DotAvatar) -> DotResult:
 	if not res.ok:
 		return res
 
-	# The backbone answers with the digest it computed. A mismatch means the two
-	# sides canonicalise differently, which is not cosmetic: the digest is the
-	# entire mechanism by which a client knows its cached copy of another player
-	# is stale, so if they disagree every client re-fetches every avatar on every
-	# join and nothing anywhere reports an error. Warned rather than failed —
-	# the write DID happen, and refusing it afterwards would be a lie.
+		# The backbone's digest: a mismatch means the sides canonicalise differently, so every client would
+		# re-fetch every avatar on every join with no error. Warn, not fail: the write DID happen.
 	var mine := avatar.digest()
 
 	if res.value is String and res.value != "" and res.value != mine:

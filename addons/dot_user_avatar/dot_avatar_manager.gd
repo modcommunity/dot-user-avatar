@@ -2,24 +2,9 @@
 class_name DotAvatarManager
 extends Node
 
-## Resolves, validates and publishes avatars. The node a game adds.
-##
-## [codeblock]
-## var avatars := DotAvatarManager.new()
-## avatars.schema = preload("res://avatars/humanoid.tres")
-## add_child(avatars)
-##
-## var resolved := await avatars.resolve(user_key, entitlements)
-## [/codeblock]
-##
-## [b]The server-side rule this exists to enforce:[/b] an avatar arriving from a
-## client is validated against the schema and the player's entitlements, and the
-## server loads nothing to do it. No mesh, no texture, no scene. That is what lets a
-## dedicated server run a match full of cosmetics it has never seen.
-##
-## [b]dot-user is not imported.[/b] The manager takes a scoped key, and finds
-## [code]dot_user_manager[/code] through [DotRegistry] only to keep the profile's
-## avatar digest current when one is installed. Everything works without it.
+## Resolves, validates and publishes avatars; usage in README.md. The node a game adds.
+## Server rule: a client's avatar is validated against schema and entitlements, loading no mesh, texture or scene.
+## dot-user is not imported: [code]dot_user_manager[/code] is found through [DotRegistry] only to keep the profile digest current.
 
 const CHANNEL := "avatar"
 const SERVICE := &"dot_avatar_manager"
@@ -34,9 +19,7 @@ signal avatar_resolved(user_key: String, avatar: DotAvatar)
 signal avatar_published(user_key: String, avatar: DotAvatar)
 
 ## Emitted when a stored avatar had to be repaired to fit the current schema.
-##
-## Carries what changed, so a game can tell the player rather than silently
-## redressing them.
+## Carries what changed, so a game can tell the player.
 signal avatar_conformed(user_key: String, changes: PackedStringArray)
 
 ## Emitted when a publish is refused. The hook for a moderation log.
@@ -69,30 +52,14 @@ var store: DotAvatarStore = null
 ## Resolves part ids to content. Client-side only; a server never needs one.
 var catalogue: DotAvatarCatalogue = null
 
-## `func(user_key: String) -> DotAvatar`: the avatar a player with none stored wears.
-## Unset, [method DotAvatarSchema.default_avatar].
-##
-## [b]The schema's default is one document, so everybody without an avatar is the same
-## person.[/b] A game that varies its stock look per player — every one in this family
-## does, by hashing an id — lost that variety the moment the platform admitted somebody,
-## because what admission resolves for a first-time player is this default and a game
-## rightly prefers the platform's answer to its own. Hashing the scoped [param user_key]
-## keeps a player the same person on every visit to a server, which a per-session id did
-## not. What it returns is validated against the schema like anything stored; one that
-## fails falls back to the schema's default with a line, because a stock look is never a
-## reason to leave somebody undrawn.
+## `func(user_key: String) -> DotAvatar`: the avatar a player with none stored wears. Unset, [method DotAvatarSchema.default_avatar].
+## The schema default is one document, so a game that varies its stock look per player (hash the scoped [param user_key], stable across visits) supplies this.
+## The result is validated like anything stored; a failure falls back to the default with a log line, as a stock look never justifies leaving somebody undrawn.
 var default_avatar_fn: Callable = Callable()
 
 ## `func(avatar: DotAvatar) -> DotAvatar`: a document for ANOTHER schema, as this one.
-##
-## [b]A member has one avatar on the site, over the site's schema, and every game has
-## its own.[/b] Without this, `conform` refuses the site's document because it names a
-## different schema — correctly — and every member arrives as the stock person in every
-## game. A game that can say what the site's choices mean in its own terms ("their torso
-## skin is my body") gives its translation here; it runs before conform and validate, so
-## what it returns is held to this schema like anything stored. Null, or no function,
-## is the default avatar, with no line: a document this game cannot read is not an
-## error, it is a person this game draws as stock.
+## A member has one site avatar over the site's schema and each game has its own; without this every member arrives as stock.
+## Runs before conform and validate. Null, or no function, is the default avatar with no line: unreadable is not an error.
 var translate_fn: Callable = Callable()
 
 ## user_key -> {avatar, expires_at, active}
@@ -105,8 +72,6 @@ var _ready_ok: bool = false
 ## Publishes refused for entitlement reasons. Watched by an operator.
 var refused_count: int = 0
 
-
-# --- Lifecycle -------------------------------------------------------------
 
 func _ready() -> void:
 	if Engine.is_editor_hint():
@@ -190,13 +155,8 @@ func _build_store() -> DotResult:
 		"local":
 			return DotResult.success(DotAvatarStoreLocal.at(config.directory))
 		"backbone":
-			# Built here now that DotAvatarStoreBackbone exists, and it holds the
-			# credential from the CONFIG rather than one this addon mints. That
-			# was the objection the earlier refusal recorded: a store built with
-			# no way to be given a token would have had to invent one.
-			#
-			# Assigning `store` directly is still supported and is what a host
-			# sharing one DotHttp across every backbone call should do.
+			# Built from the CONFIG's credential, not one this addon mints; a host sharing one DotHttp across
+			# every backbone call assigns `store` directly.
 			var backbone := DotAvatarStoreBackbone.at(
 				config.backbone_url, config.backbone_token
 			)
@@ -221,14 +181,8 @@ func is_ready() -> bool:
 	return _ready_ok
 
 
-# --- Resolving -------------------------------------------------------------
-
 ## The avatar a player should be shown as.
-##
-## Conforms a stored document to the current schema when the config allows it, so
-## retiring a part does not make a returning player unloadable. Falls back to the
-## schema's default rather than to nothing: a player with no avatar must still be
-## visible.
+## Conforms a stored document when the config allows, and falls back to the schema default rather than nothing: a player must be visible.
 func resolve(
 	user_key: String,
 	entitlements: DotAvatarEntitlements = null
@@ -328,10 +282,8 @@ func _default_for(user_key: String) -> DotResult:
 	if default_avatar_fn.is_valid():
 		var chosen: Variant = default_avatar_fn.call(user_key)
 
-		# Null is "no opinion", not a bad answer: a wrapper that forwards to a game's
-		# optional stock function — dot-platform's identity layer is one — returns null
-		# when the game set none, and a WARN for every first-time player of such a game
-		# would be a warning about a configuration nobody got wrong.
+		# Null is "no opinion", not a bad answer: a wrapper forwarding to an unset stock function returns null,
+		# and warning for every first-time player would be about a configuration nobody got wrong.
 		if chosen == null:
 			pass
 		elif chosen is DotAvatar and schema.validate(chosen).ok:
@@ -347,13 +299,8 @@ func _default_for(user_key: String) -> DotResult:
 	return DotResult.success(avatar)
 
 
-# --- Publishing ------------------------------------------------------------
-
 ## Accepts an avatar from a player, or refuses it with a reason.
-##
-## [b]This is the trust boundary.[/b] Everything a client sends arrives here, and
-## every check that matters happens before anything is stored: the document's
-## structure, the schema, and the player's entitlements. None of it loads an asset.
+## The trust boundary: structure, schema and entitlements are all checked before anything is stored, and none loads an asset.
 func publish(
 	user_key: String,
 	avatar: DotAvatar,
@@ -408,9 +355,7 @@ func publish(
 
 
 ## Writes the avatar's digest into the player's profile, when dot-user is present.
-##
-## Best-effort by design: a game with no profiles still has working avatars, and an
-## avatar publish must not fail because a profile write did.
+## Best-effort: a profile write must not fail an avatar publish.
 func _update_profile_digest(user_key: String, avatar: DotAvatar) -> void:
 	var users := DotRegistry.get_service(USER_SERVICE)
 
@@ -434,8 +379,6 @@ func _update_profile_digest(user_key: String, avatar: DotAvatar) -> void:
 
 	profile.set("avatar_id", avatar.digest())
 
-
-# --- Cache -----------------------------------------------------------------
 
 func _cached(user_key: String) -> DotAvatar:
 	if not _cache.has(user_key):
@@ -500,8 +443,6 @@ func cached_count() -> int:
 func clear_cache() -> void:
 	_cache.clear()
 
-
-# --- Diagnostics -----------------------------------------------------------
 
 func describe() -> Dictionary:
 	return {
