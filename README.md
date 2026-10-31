@@ -64,7 +64,7 @@ Validation is four questions answered from ids: does the slot exist, does the pa
 | `DotAvatarBuilder` | Plan (pure) and apply (touches nodes). |
 | `DotAvatarSync` | Bit-packed wire format and the backbone endpoints. |
 | `DotAvatarStore` | Where documents live: memory, JSON files, or a backbone. |
-| `DotAvatarActions`, `DotAvatarActionInput` | A player's equipped emotes, poses and gestures, the built-in starter set, and the keys (`,` `.` `/` by default, rebindable) and console commands that play them. |
+| `DotAvatarActions`, `DotAvatarActionInput` | A player's equipped emotes, poses and gestures, the built-in starter set, and the keys (`,` `;` `/` by default, rebindable) and console commands that play them. |
 | `DotAvatarContentCache` | Uploaded avatar and action GLBs, kept by content id after a size and hash check, loaded at runtime. |
 | `DotAvatarManager` | Resolve, conform, validate, publish, cache, rate-limit. |
 

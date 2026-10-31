@@ -10,10 +10,10 @@ const ACTION_EMOTE := &"dot_avatar_emote"
 const ACTION_POSE := &"dot_avatar_pose"
 const ACTION_GESTURE := &"dot_avatar_gesture"
 
-## Kind to input action and default physical key; the site shows the same keys.
+## Kind to input action and default physical key; the site shows the same keys. Pose is Semicolon, not Period, which games use for a team menu.
 const BINDINGS := {
 	DotAvatarActions.EMOTE: {"action": ACTION_EMOTE, "key": KEY_COMMA},
-	DotAvatarActions.POSE: {"action": ACTION_POSE, "key": KEY_PERIOD},
+	DotAvatarActions.POSE: {"action": ACTION_POSE, "key": KEY_SEMICOLON},
 	DotAvatarActions.GESTURE: {"action": ACTION_GESTURE, "key": KEY_SLASH},
 }
 

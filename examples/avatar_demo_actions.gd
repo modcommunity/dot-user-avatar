@@ -85,6 +85,13 @@ func _test_action_input() -> void:
 	var pose_events := InputMap.action_get_events(DotAvatarActionInput.ACTION_POSE)
 	h._check(pose_events.size() == 1 and (pose_events[0] as InputEventKey).physical_keycode == KEY_P,
 		"a key bound first is left alone")
+	InputMap.erase_action(DotAvatarActionInput.ACTION_POSE)
+	DotAvatarActionInput.ensure_actions()
+	pose_events = InputMap.action_get_events(DotAvatarActionInput.ACTION_POSE)
+	h._check(pose_events.size() == 1 and (pose_events[0] as InputEventKey).physical_keycode == KEY_SEMICOLON,
+		"the pose key defaults to semicolon, clear of the team menu's period")
+	InputMap.action_erase_events(DotAvatarActionInput.ACTION_POSE)
+	InputMap.action_add_event(DotAvatarActionInput.ACTION_POSE, p)
 
 	var input := DotAvatarActionInput.new()
 	h.add_child(input)
