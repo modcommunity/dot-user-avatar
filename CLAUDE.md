@@ -31,7 +31,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 
 ## Running and testing
 
-- The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/avatar_demo.tscn`, `res://examples/avatar_fetch.tscn` (the fetcher, offline) and `res://examples/avatar_wearables.tscn` (6 sections, 54 checks).
+- The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/avatar_demo.tscn`, `res://examples/avatar_fetch.tscn` (the fetcher, offline) and `res://examples/avatar_wearables.tscn`.
 - `_test_store_contract` runs one sequence against every store and requires the same answers. **Add any new store to it.**
 - **Add a case for any change to `DotAvatarSchema.validate`, `DotAvatarSync.read` or the entitlement path**: there a bug is a vulnerability rather than a crash.
 

@@ -104,7 +104,7 @@ The default is that a player owns **nothing**; a part is wearable only if it is 
 
 ```bash
 godot --headless --path . --import
-godot --headless --path . res://examples/avatar_demo.tscn     # 201 checks
+godot --headless --path . res://examples/avatar_demo.tscn
 ```
 
 Exits non-zero on failure. One `ERR avatar.store an avatar was not saved` on stderr is expected: the suite fails a backbone write on purpose.
